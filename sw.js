@@ -2,7 +2,7 @@
    Service Worker — Offline Caching
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v4';
+const CACHE_NAME = 'novel-writer-v5';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.
@@ -13,6 +13,7 @@ const ASSETS = [
   'css/style.css',
   'js/i18n.js',
   'js/storage.js',
+  'js/icons.js',
   'js/markdown.js',
   'js/export.js',
   'js/app.js',
