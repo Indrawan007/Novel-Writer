@@ -146,10 +146,20 @@ html, body {
 .item-actions button:hover { background: var(--bg); color: var(--danger); }
 .item-actions .rename-btn:hover { color: var(--accent); }
 
-/* Status drag & drop bab */
-.item-list li[draggable] { user-select: none; }
+/* Status drag & drop bab (mouse: HTML5 DnD, sentuh: long-press drag) */
+.item-list li[draggable] { user-select: none; -webkit-user-drag: element; }
 .item-list li.dragging { opacity: 0.4; }
-.item-list li.drag-over { background: var(--bg-hover); box-shadow: inset 0 2px 0 var(--accent); }
+.item-list li.drag-over,
+.item-list li.drag-over-before { background: var(--bg-hover); box-shadow: inset 0 2px 0 var(--accent); }
+.item-list li.drag-over-after  { background: var(--bg-hover); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Item daftar bisa dinavigasi keyboard */
+.item-list li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Layar sentuh tidak punya :hover — aksi & indikator selalu terlihat */
+@media (hover: none) {
+  .item-list li .item-actions { opacity: 1; }
+}
 
 /* Footer sidebar: statistik */
 .sidebar-footer {
@@ -163,6 +173,8 @@ html, body {
 .stat-row strong { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
 
 .save-indicator { align-items: center; gap: 7px; margin-top: 8px; margin-bottom: 0; }
+.save-indicator.save-error { color: var(--danger); font-weight: 600; }
+.save-indicator.save-error .save-dot { background: var(--danger); animation: none; opacity: 1; }
 .save-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--accent);
@@ -532,6 +544,12 @@ kbd {
   from { opacity: 0; transform: translate(-50%, 6px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
+#toast.toast-error {
+  background: var(--danger);
+  color: #fdf6f2;
+  max-width: min(92vw, 520px);
+  text-align: center;
+}
 
 /* ---- RESPONSIF — sidebar off-canvas di layar sempit ---- */
 #btn-open-sidebar { display: none; }
@@ -572,5 +590,24 @@ kbd {
   }
 }
 
+/* Pesan dialog konfirmasi (bisa multi-baris, mis. ringkasan restore) */
+#confirm-msg {
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 8px;
+  white-space: pre-line;
+}
+
 /* Utils */
 [hidden] { display: none !important; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

@@ -1,5 +1,6 @@
 /* ============================================
-   i18n — Bilingual (ID / EN) — Final
+   i18n — Bilingual (ID / EN)
+   Mendukung: teks, placeholder, title, dan aria-label.
    ============================================ */
 
 const I18N = {
@@ -26,6 +27,10 @@ const I18N = {
     backupRestore:   "Cadangan & Pulihkan",
     backupData:      "Cadangkan",
     restoreData:     "Pulihkan",
+    undoRestore:     "Batalkan restore terakhir",
+    undoRestoreDone: "Data sebelum restore berhasil dikembalikan.",
+    undoRestoreNone: "Tidak ada cadangan restore untuk dibatalkan.",
+    undoRestoreFail: "Gagal mengembalikan cadangan.",
     currentChapter:  "Bab saat ini",
     entireNovel:     "Seluruh novel",
     chapterWords:    "Kata (bab)",
@@ -34,12 +39,28 @@ const I18N = {
     editorPlaceholder: "Mulai menulis... (Mendukung Markdown)\n\n# Judul Bab\n\nParagraf pertama...\n\n**Tebal** dan *miring*",
     welcomeTitle:    "Selamat Datang di Novel Writer",
     welcomeDesc:     "Buat proyek baru untuk mulai menulis novelmu.",
+    emptyPickProjTitle: "Pilih proyek",
+    emptyPickProjDesc:  "Pilih salah satu proyek di sidebar untuk mulai menulis.",
+    emptyNoChTitle:  "Belum ada bab",
+    emptyNoChDesc:   "Proyek ini belum memiliki bab. Buat bab pertama untuk mulai menulis.",
+    emptyPickChTitle: "Pilih bab",
+    emptyPickChDesc:  "Pilih bab di sidebar untuk mulai menulis, atau buat bab baru.",
     offlineReady:    "Siap digunakan offline",
+    updateAvailable: "Versi baru tersedia — muat ulang halaman untuk memperbarui.",
+    syncedFromOtherTab: "Data diperbarui dari tab lain.",
+    editorLabel:     "Editor bab",
     confirmDelProj:  "Hapus proyek ini beserta semua babnya?",
     confirmDelCh:    "Hapus bab ini?",
-    saved:           "Tersimpan ✓",
+    confirmRestore:  "Pulihkan data dari file ini?\n\nFile berisi: {projects} proyek, {chapters} bab ({words} kata).\nData saat ini: {curProjects} proyek, {curChapters} bab ({curWords} kata) — akan ditimpa.\n\nCadangan otomatis dibuat, jadi restore bisa dibatalkan dari Pengaturan.",
+    continue:        "Lanjutkan",
+    saved:           "Tersimpan",
     saving:          "Menyimpan...",
+    storageFull:     "Penyimpanan browser penuh — data TIDAK tersimpan! Unduh cadangan sekarang.",
+    storageSaveFail: "Gagal menyimpan ke browser.",
     exported:        "Berhasil diekspor!",
+    exportFail:      "Ekspor gagal.",
+    exportLibFail:   "Pustaka ekspor gagal dimuat — ekspor PDF/DOCX butuh koneksi internet sekali.",
+    exportEmpty:     "Tidak ada bab untuk diekspor.",
     backupDone:      "Cadangan berhasil diunduh!",
     restoreDone:     "Data berhasil dipulihkan!",
     restoreFail:     "File tidak valid!",
@@ -47,13 +68,27 @@ const I18N = {
     untitled:        "Tanpa Judul",
     chapter:         "Bab",
     rename:          "Ganti Nama",
+    renameProject:   "Ganti Nama Proyek",
+    renameChapter:   "Ganti Nama Bab",
+    autoSave:        "Auto-save",
     save:            "Simpan",
     shortcuts:       "Pintasan Keyboard",
     shortcutSave:    "Simpan",
     shortcutPreview: "Preview",
-    shortcutExport:  "Ekspor",
     shortcutClose:   "Tutup modal",
+    shortcutIndent:  "Indent / un-indent",
+    shortcutReorder: "Urutkan bab (fokus di daftar bab)",
     loading:         "Memuat...",
+    /* Label & tooltip toolbar */
+    menu:            "Menu",
+    bold:            "Tebal",
+    italic:          "Miring",
+    heading:         "Judul bagian",
+    preview:         "Preview",
+    themeToDark:     "Ganti ke tema gelap",
+    themeToLight:    "Ganti ke tema terang",
+    openProject:     "Buka proyek",
+    reorderHint:     "Tahan & geser, atau Alt+Panah untuk mengurutkan",
   },
   en: {
     appTitle:        "Novel Writer",
@@ -78,6 +113,10 @@ const I18N = {
     backupRestore:   "Backup & Restore",
     backupData:      "Backup",
     restoreData:     "Restore",
+    undoRestore:     "Undo last restore",
+    undoRestoreDone: "Data from before the restore was recovered.",
+    undoRestoreNone: "No restore backup to undo.",
+    undoRestoreFail: "Failed to recover the backup.",
     currentChapter:  "Current chapter",
     entireNovel:     "Entire novel",
     chapterWords:    "Words (chapter)",
@@ -86,12 +125,28 @@ const I18N = {
     editorPlaceholder: "Start writing... (Markdown supported)\n\n# Chapter Title\n\nFirst paragraph...\n\n**Bold** and *italic*",
     welcomeTitle:    "Welcome to Novel Writer",
     welcomeDesc:     "Create a new project to start writing your novel.",
+    emptyPickProjTitle: "Select a project",
+    emptyPickProjDesc:  "Pick a project from the sidebar to start writing.",
+    emptyNoChTitle:  "No chapters yet",
+    emptyNoChDesc:   "This project has no chapters. Create the first one to start writing.",
+    emptyPickChTitle: "Select a chapter",
+    emptyPickChDesc:  "Pick a chapter from the sidebar, or create a new one.",
     offlineReady:    "Ready for offline use",
+    updateAvailable: "A new version is available — reload the page to update.",
+    syncedFromOtherTab: "Data updated from another tab.",
+    editorLabel:     "Chapter editor",
     confirmDelProj:  "Delete this project and all its chapters?",
     confirmDelCh:    "Delete this chapter?",
-    saved:           "Saved ✓",
+    confirmRestore:  "Restore data from this file?\n\nFile contains: {projects} projects, {chapters} chapters ({words} words).\nCurrent data: {curProjects} projects, {curChapters} chapters ({curWords} words) — will be overwritten.\n\nAn automatic backup is kept, so the restore can be undone from Settings.",
+    continue:        "Continue",
+    saved:           "Saved",
     saving:          "Saving...",
+    storageFull:     "Browser storage is full — data NOT saved! Download a backup now.",
+    storageSaveFail: "Failed to save to the browser.",
     exported:        "Exported successfully!",
+    exportFail:      "Export failed.",
+    exportLibFail:   "Export library failed to load — PDF/DOCX export needs an internet connection once.",
+    exportEmpty:     "No chapters to export.",
     backupDone:      "Backup downloaded!",
     restoreDone:     "Data restored successfully!",
     restoreFail:     "Invalid file!",
@@ -99,13 +154,27 @@ const I18N = {
     untitled:        "Untitled",
     chapter:         "Chapter",
     rename:          "Rename",
+    renameProject:   "Rename Project",
+    renameChapter:   "Rename Chapter",
+    autoSave:        "Auto-save",
     save:            "Save",
     shortcuts:       "Keyboard Shortcuts",
     shortcutSave:    "Save",
     shortcutPreview: "Preview",
-    shortcutExport:  "Export",
     shortcutClose:   "Close modal",
+    shortcutIndent:  "Indent / un-indent",
+    shortcutReorder: "Reorder chapters (focus in chapter list)",
     loading:         "Loading...",
+    /* Toolbar labels & tooltips */
+    menu:            "Menu",
+    bold:            "Bold",
+    italic:          "Italic",
+    heading:         "Section heading",
+    preview:         "Preview",
+    themeToDark:     "Switch to dark theme",
+    themeToLight:    "Switch to light theme",
+    openProject:     "Open project",
+    reorderHint:     "Hold & drag, or Alt+Arrow to reorder",
   }
 };
 
@@ -126,13 +195,20 @@ function readStoredLang() {
 
 let currentLang = readStoredLang();
 
-function t(key) {
-  return (I18N[currentLang] && I18N[currentLang][key]) || key;
+/** Terjemahan; mendukung interpolasi `{nama}` melalui argumen kedua. */
+function t(key, vars) {
+  let str = (I18N[currentLang] && I18N[currentLang][key]) || key;
+  if (vars) {
+    str = str.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+  }
+  return str;
 }
 
-/* Hanya mengubah terjemahan yang tampil di layar.
-   Persistensi dilakukan pemanggil via Storage.saveSettings({ lang }),
-   agar bahasa tetap satu sumber kebenaran dengan pengaturan lain. */
+/** Bahasa aktif ('id' | 'en') — dipakai juga untuk format angka. */
+function getLang() {
+  return currentLang;
+}
+
 function applyLanguage(lang) {
   if (lang === 'en' || lang === 'id') currentLang = lang;
   document.documentElement.lang = currentLang;
@@ -144,5 +220,13 @@ function applyLanguage(lang) {
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.dataset.i18nPlaceholder);
   });
-}
 
+  // Tooltip & label aksesibilitas ikut diterjemahkan
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
+  });
+
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  });
+}

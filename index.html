@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Writer</title>
-  <meta name="description" content="Minimalist novel writing app — distraction-free"> 
+  <meta name="description" content="Aplikasi menulis novel yang minimalis — distraction-free, offline-first">
   <meta name="theme-color" content="#f4f1e8">
   <!-- Terapkan tema tersimpan SEBELUM paint (mencegah flash tema yang salah) -->
   <script>
@@ -21,7 +21,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%238a3b2e'/><text x='32' y='45' font-family='Georgia,serif' font-size='36' text-anchor='middle' fill='%23f4f1e8'>N</text></svg>">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
@@ -31,10 +31,10 @@
   <div id="app">
 
     <!-- ====== SIDEBAR ====== -->
-    <aside id="sidebar">
+    <aside id="sidebar" aria-label="Daftar proyek dan bab">
       <div class="sidebar-header">
         <h1 class="logo" data-i18n="appTitle">Novel Writer</h1>
-        <button id="btn-close-sidebar" class="icon-btn" aria-label="Close" title="Close">
+        <button id="btn-close-sidebar" class="icon-btn" data-i18n-title="close" data-i18n-aria="close" aria-label="Close" title="Close">
           <span class="icon" data-icon="close" aria-hidden="true"></span>
         </button>
       </div>
@@ -43,18 +43,20 @@
       <div class="sidebar-section">
         <div class="section-header">
           <span data-i18n="projects">Proyek</span>
-          <button id="btn-new-project" class="icon-btn small" title="New Project" aria-label="New Project">
+          <button id="btn-new-project" class="icon-btn small" data-i18n-title="newProject" data-i18n-aria="newProject" title="New Project" aria-label="New Project">
             <span class="icon" data-icon="plus" aria-hidden="true"></span>
           </button>
         </div>
-        <ul id="project-list" class="item-list"></ul>
+        <ul id="project-list" class="item-list" role="list"></ul>
       </div>
 
       <!-- Chapters -->
       <div class="sidebar-section" id="chapter-section" hidden>
         <div class="section-header">
           <span data-i18n="chapters">Bab</span>
-          <button id="btn-new-chapter" class="icon-btn small" title="New Chapter">＋</button>
+          <button id="btn-new-chapter" class="icon-btn small" data-i18n-title="newChapter" data-i18n-aria="newChapter" title="New Chapter" aria-label="New Chapter">
+            <span class="icon" data-icon="plus" aria-hidden="true"></span>
+          </button>
         </div>
         <ul id="chapter-list" class="item-list" role="list"></ul>
       </div>
@@ -83,7 +85,7 @@
     <main id="main">
       <!-- Toolbar -->
       <header id="toolbar">
-        <button id="btn-open-sidebar" class="icon-btn" aria-label="Menu" title="Menu">
+        <button id="btn-open-sidebar" class="icon-btn" data-i18n-title="menu" data-i18n-aria="menu" aria-label="Menu" title="Menu">
           <span class="icon" data-icon="menu" aria-hidden="true"></span>
         </button>
         <span id="toolbar-title" data-i18n="selectChapter">Pilih bab untuk mulai menulis</span>
@@ -92,14 +94,14 @@
           <button id="btn-italic" class="icon-btn fmt-btn" title="Italic (Ctrl+I)" aria-label="Italic" hidden><i>I</i></button>
           <button id="btn-heading" class="icon-btn fmt-btn" title="Heading" aria-label="Heading" hidden>H</button>
           <span class="toolbar-divider" id="fmt-divider" hidden></span>
-          <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)" aria-label="Preview" hidden>
+          <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)" aria-label="Preview" aria-pressed="false" hidden>
             <span class="icon" data-icon="eye" aria-hidden="true"></span>
           </button>
-          <button id="btn-export" class="icon-btn" title="Export" aria-label="Export" hidden>
+          <button id="btn-export" class="icon-btn" data-i18n-title="export" data-i18n-aria="export" title="Export" aria-label="Export" hidden>
             <span class="icon" data-icon="download" aria-hidden="true"></span>
           </button>
           <span class="toolbar-divider"></span>
-          <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
+          <button id="btn-settings" class="icon-btn" data-i18n-title="settings" data-i18n-aria="settings" title="Settings" aria-label="Settings">
             <span class="icon" data-icon="sliders" aria-hidden="true"></span>
           </button>
           <button id="btn-theme" class="icon-btn" title="Toggle Theme" aria-label="Toggle Theme">
@@ -110,16 +112,17 @@
 
       <!-- Editor -->
       <div id="editor-wrap" hidden>
-        <textarea id="editor" spellcheck="true" data-i18n-placeholder="editorPlaceholder" placeholder="Mulai menulis..."></textarea>
-        <div id="preview" class="prose" hidden></div>
+        <label for="editor" class="sr-only" id="editor-label" data-i18n="editorLabel">Editor bab</label>
+        <textarea id="editor" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" placeholder="Mulai menulis..."></textarea>
+        <div id="preview" class="prose" hidden tabindex="0" role="document" aria-live="off"></div>
       </div>
 
-      <!-- Empty State -->
+      <!-- Empty State (teks & aksi diisi dinamis oleh app.js sesuai kondisi) -->
       <div id="empty-state">
-        <div class="empty-icon">📖</div>
-        <h2 data-i18n="welcomeTitle">Selamat Datang di Novel Writer</h2>
-        <p data-i18n="welcomeDesc">Buat proyek baru untuk mulai menulis novelmu.</p>
-        <button id="btn-empty-new" class="btn-primary" data-i18n="newProject">Proyek Baru</button>
+        <div class="empty-icon" aria-hidden="true"><span class="icon" data-icon="feather"></span></div>
+        <h2 id="empty-title" data-i18n="welcomeTitle">Selamat Datang di Novel Writer</h2>
+        <p id="empty-desc" data-i18n="welcomeDesc">Buat proyek baru untuk mulai menulis novelmu.</p>
+        <button id="btn-empty-action" class="btn-primary" data-action="new-project" data-i18n="newProject">Proyek Baru</button>
       </div>
     </main>
   </div>
@@ -128,18 +131,18 @@
   <div id="modal-overlay" hidden>
 
     <!-- New Project -->
-    <div id="modal-project" class="modal" hidden>
-      <h2 data-i18n="newProject">Proyek Baru</h2>
+    <div id="modal-project" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-project-title" hidden>
+      <h2 id="modal-project-title" data-i18n="newProject">Proyek Baru</h2>
       <div class="form-group">
-        <label data-i18n="title">Judul</label>
-        <input type="text" id="inp-proj-title" maxlength="100" required autofocus>
+        <label for="inp-proj-title" data-i18n="title">Judul</label>
+        <input type="text" id="inp-proj-title" maxlength="100" required>
       </div>
       <div class="form-group">
-        <label data-i18n="author">Penulis</label>
+        <label for="inp-proj-author" data-i18n="author">Penulis</label>
         <input type="text" id="inp-proj-author" maxlength="60">
       </div>
       <div class="form-group">
-        <label data-i18n="description">Deskripsi</label>
+        <label for="inp-proj-desc" data-i18n="description">Deskripsi</label>
         <textarea id="inp-proj-desc" rows="2" maxlength="300"></textarea>
       </div>
       <div class="modal-actions">
@@ -149,10 +152,10 @@
     </div>
 
     <!-- Rename Project -->
-    <div id="modal-rename-project" class="modal" hidden>
-      <h2 data-i18n="renameProject">Ganti Nama Proyek</h2>
+    <div id="modal-rename-project" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-rename-proj-title" hidden>
+      <h2 id="modal-rename-proj-title" data-i18n="renameProject">Ganti Nama Proyek</h2>
       <div class="form-group">
-        <label data-i18n="title">Judul</label>
+        <label for="inp-rename-proj" data-i18n="title">Judul</label>
         <input type="text" id="inp-rename-proj" maxlength="100" required>
       </div>
       <div class="modal-actions">
@@ -162,11 +165,11 @@
     </div>
 
     <!-- New Chapter -->
-    <div id="modal-chapter" class="modal" hidden>
-      <h2 data-i18n="newChapter">Bab Baru</h2>
+    <div id="modal-chapter" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-chapter-title" hidden>
+      <h2 id="modal-chapter-title" data-i18n="newChapter">Bab Baru</h2>
       <div class="form-group">
-        <label data-i18n="chapterTitle">Judul Bab</label>
-        <input type="text" id="inp-ch-title" maxlength="100" required autofocus>
+        <label for="inp-ch-title" data-i18n="chapterTitle">Judul Bab</label>
+        <input type="text" id="inp-ch-title" maxlength="100" required>
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
@@ -175,10 +178,10 @@
     </div>
 
     <!-- Rename Chapter -->
-    <div id="modal-rename-chapter" class="modal" hidden>
-      <h2 data-i18n="renameChapter">Ganti Nama Bab</h2>
+    <div id="modal-rename-chapter" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-rename-ch-title" hidden>
+      <h2 id="modal-rename-ch-title" data-i18n="renameChapter">Ganti Nama Bab</h2>
       <div class="form-group">
-        <label data-i18n="chapterTitle">Judul Bab</label>
+        <label for="inp-rename-ch" data-i18n="chapterTitle">Judul Bab</label>
         <input type="text" id="inp-rename-ch" maxlength="100" required>
       </div>
       <div class="modal-actions">
@@ -188,9 +191,9 @@
     </div>
 
     <!-- Export -->
-    <div id="modal-export" class="modal" hidden>
-      <h2 data-i18n="export">Ekspor</h2>
-      <div class="export-scope">
+    <div id="modal-export" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-export-title" hidden>
+      <h2 id="modal-export-title" data-i18n="export">Ekspor</h2>
+      <div class="export-scope" role="radiogroup" aria-labelledby="modal-export-title">
         <label class="radio-label"><input type="radio" name="exp-scope" value="chapter" checked> <span data-i18n="currentChapter">Bab saat ini</span></label>
         <label class="radio-label"><input type="radio" name="exp-scope" value="all"> <span data-i18n="entireNovel">Seluruh novel</span></label>
       </div>
@@ -223,11 +226,11 @@
     </div>
 
     <!-- Settings -->
-    <div id="modal-settings" class="modal modal-lg" hidden>
-      <h2 data-i18n="settings">Pengaturan</h2>
+    <div id="modal-settings" class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="modal-settings-title" hidden>
+      <h2 id="modal-settings-title" data-i18n="settings">Pengaturan</h2>
 
       <div class="form-group">
-        <label data-i18n="language">Bahasa</label>
+        <label for="set-lang" data-i18n="language">Bahasa</label>
         <select id="set-lang">
           <option value="id">Indonesia</option>
           <option value="en">English</option>
@@ -235,17 +238,17 @@
       </div>
 
       <div class="form-group">
-        <label><span data-i18n="fontSize">Ukuran Font</span>: <span id="fontsize-val" style="color:var(--text); text-transform:none;">18px</span></label>
+        <label for="set-fontsize"><span data-i18n="fontSize">Ukuran Font</span>: <span id="fontsize-val" style="color:var(--text); text-transform:none;">18px</span></label>
         <input type="range" id="set-fontsize" min="14" max="28" value="18" class="custom-range">
       </div>
 
       <div class="form-group">
-        <label><span data-i18n="lineHeight">Tinggi Baris</span>: <span id="lineheight-val" style="color:var(--text); text-transform:none;">1.8</span></label>
+        <label for="set-lineheight"><span data-i18n="lineHeight">Tinggi Baris</span>: <span id="lineheight-val" style="color:var(--text); text-transform:none;">1.8</span></label>
         <input type="range" id="set-lineheight" min="1.4" max="2.2" step="0.1" value="1.8" class="custom-range">
       </div>
 
       <div class="form-group">
-        <label><span data-i18n="autoSave">Auto-save</span>: <span id="autosave-val" style="color:var(--text); text-transform:none;">1s</span></label>
+        <label for="set-autosave"><span data-i18n="autoSave">Auto-save</span>: <span id="autosave-val" style="color:var(--text); text-transform:none;">1s</span></label>
         <input type="range" id="set-autosave" min="500" max="5000" step="500" value="1000" class="custom-range">
       </div>
 
@@ -260,7 +263,11 @@
             <span class="icon" data-icon="upload" aria-hidden="true"></span>
             <span data-i18n="restoreData">Pulihkan</span>
           </button>
-          <input type="file" id="inp-restore" accept=".json" hidden>
+          <button class="btn-ghost" id="btn-undo-restore" hidden>
+            <span class="icon" data-icon="undo" aria-hidden="true"></span>
+            <span data-i18n="undoRestore">Batalkan restore terakhir</span>
+          </button>
+          <input type="file" id="inp-restore" accept=".json,application/json" hidden>
         </div>
       </div>
 
@@ -268,10 +275,12 @@
         <label data-i18n="shortcuts">Pintasan Keyboard</label>
         <div class="shortcuts-grid">
           <div><kbd>Ctrl</kbd> + <kbd>S</kbd> <span data-i18n="shortcutSave">Simpan</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>B</kbd> Bold</div>
-          <div><kbd>Ctrl</kbd> + <kbd>I</kbd> Italic</div>
+          <div><kbd>Ctrl</kbd> + <kbd>B</kbd> <span data-i18n="bold">Tebal</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>I</kbd> <span data-i18n="italic">Miring</span></div>
           <div><kbd>Ctrl</kbd> + <kbd>E</kbd> <span data-i18n="shortcutPreview">Preview</span></div>
-          <div><kbd>Esc</kbd> <span data-i18n="shortcutClose">Tutup Modal</span></div>
+          <div><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span data-i18n="shortcutIndent">Indent</span></div>
+          <div><kbd>Alt</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> <span data-i18n="shortcutReorder">Urutkan bab</span></div>
+          <div><kbd>Esc</kbd> <span data-i18n="shortcutClose">Tutup modal</span></div>
         </div>
       </div>
 
@@ -281,18 +290,18 @@
     </div>
 
     <!-- Confirm -->
-    <div id="modal-confirm" class="modal" hidden>
-      <h2 data-i18n="confirm">Konfirmasi</h2>
-      <p id="confirm-msg" style="color: var(--text-dim); font-size: 14px; margin-bottom: 8px;"></p>
+    <div id="modal-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-confirm-title" hidden>
+      <h2 id="modal-confirm-title" data-i18n="confirm">Konfirmasi</h2>
+      <p id="confirm-msg"></p>
       <div class="modal-actions">
         <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
-        <button class="btn-danger" id="btn-confirm-yes" data-i18n="delete">Hapus</button>
+        <button class="btn-danger" id="btn-confirm-yes">Hapus</button>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
-  <div id="toast" hidden></div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="js/i18n.js"></script>
   <script src="js/storage.js"></script>
