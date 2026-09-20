@@ -1,5 +1,5 @@
 /* ============================================
-   APP — Novel Writer v1.0 (Polished)
+   APP — Novel Writer v1.0 (Safe & Robust)
    ============================================ */
 
 (function () {
@@ -12,10 +12,10 @@
   let isPreview = false;
   let saveTimer = null;
   let confirmCallback = null;
-  let renameTarget = null; // { type: 'project'|'chapter', id }
+  let renameTarget = null;
   let autoSaveDelay = data.settings.autoSaveDelay || 1000;
 
-  // ============ DOM ============
+  // ============ DOM REFS ============
   const $ = (s, p) => (p || document).querySelector(s);
   const $$ = (s, p) => [...(p || document).querySelectorAll(s)];
 
@@ -55,10 +55,11 @@
 
   let toastTimer;
   function toast(msg, ms = 2000) {
+    if (!dom.toast) return;
     dom.toast.textContent = msg;
     dom.toast.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => dom.toast.hidden = true, ms);
+    toastTimer = setTimeout(() => { if (dom.toast) dom.toast.hidden = true; }, ms);
   }
 
   function downloadBlob(blob, filename) {
@@ -78,26 +79,29 @@
   // ============ MODAL ============
   function openModal(id) {
     $$('.modal').forEach(m => m.hidden = true);
-    $(`#${id}`).hidden = false;
-    dom.modalOverlay.hidden = false;
+    const target = $(`#${id}`);
+    if (target) target.hidden = false;
+    if (dom.modalOverlay) dom.modalOverlay.hidden = false;
     const inp = $(`#${id} input[type="text"]`);
     if (inp) setTimeout(() => { inp.focus(); inp.select(); }, 60);
   }
 
   function closeModal() {
-    dom.modalOverlay.hidden = true;
+    if (dom.modalOverlay) dom.modalOverlay.hidden = true;
     $$('.modal').forEach(m => m.hidden = true);
     renameTarget = null;
   }
 
   function showConfirm(msg, cb) {
-    $('#confirm-msg').textContent = msg;
+    const msgEl = $('#confirm-msg');
+    if (msgEl) msgEl.textContent = msg;
     confirmCallback = cb;
     openModal('modal-confirm');
   }
 
   // ============ RENDER ============
   function renderProjects() {
+    if (!dom.projectList) return;
     const projects = Storage.getProjects();
     dom.projectList.innerHTML = projects.map(p => `
       <li class="${p.id === activeProjectId ? 'active' : ''}" data-id="${p.id}">
@@ -113,25 +117,27 @@
   function renderChapters() {
     const proj = Storage.getProject(activeProjectId);
     if (!proj) {
-      dom.chapterSec.hidden = true;
-      dom.sidebarFooter.hidden = true;
+      if (dom.chapterSec) dom.chapterSec.hidden = true;
+      if (dom.sidebarFooter) dom.sidebarFooter.hidden = true;
       return;
     }
-    dom.chapterSec.hidden = false;
-    dom.sidebarFooter.hidden = false;
+    if (dom.chapterSec) dom.chapterSec.hidden = false;
+    if (dom.sidebarFooter) dom.sidebarFooter.hidden = false;
 
     const chapters = (proj.chapters || []).sort((a, b) => a.order - b.order);
-    dom.chapterList.innerHTML = chapters.map(ch => `
-      <li class="${ch.id === activeChapterId ? 'active' : ''}"
-          data-id="${ch.id}"
-          draggable="true">
-        <span class="item-title">📑 ${escHtml(ch.title || t('chapter'))}</span>
-        <span class="item-actions">
-          <button class="rename-btn" data-rename-ch="${ch.id}" title="Rename">✏️</button>
-          <button data-del-ch="${ch.id}" title="${t('delete')}">🗑</button>
-        </span>
-      </li>
-    `).join('');
+    if (dom.chapterList) {
+      dom.chapterList.innerHTML = chapters.map(ch => `
+        <li class="${ch.id === activeChapterId ? 'active' : ''}"
+            data-id="${ch.id}"
+            draggable="true">
+          <span class="item-title">📑 ${escHtml(ch.title || t('chapter'))}</span>
+          <span class="item-actions">
+            <button class="rename-btn" data-rename-ch="${ch.id}" title="Rename">✏️</button>
+            <button data-del-ch="${ch.id}" title="${t('delete')}">🗑</button>
+          </span>
+        </li>
+      `).join('');
+    }
 
     updateStats();
     bindDragDrop();
@@ -142,38 +148,41 @@
     const ch = proj?.chapters?.find(c => c.id === activeChapterId);
 
     if (!ch) {
-      dom.editorWrap.hidden = true;
-      dom.emptyState.hidden = false;
-      dom.toolbarTitle.textContent = t('selectChapter');
+      if (dom.editorWrap) dom.editorWrap.hidden = true;
+      if (dom.emptyState) dom.emptyState.hidden = false;
+      if (dom.toolbarTitle) dom.toolbarTitle.textContent = t('selectChapter');
       dom.fmtBtns.forEach(b => b.hidden = true);
-      dom.fmtDivider.hidden = true;
-      dom.btnExport.hidden = true;
-      dom.btnPreview.hidden = true;
+      if (dom.fmtDivider) dom.fmtDivider.hidden = true;
+      if (dom.btnExport) dom.btnExport.hidden = true;
+      if (dom.btnPreview) dom.btnPreview.hidden = true;
       return;
     }
 
-    dom.emptyState.hidden = true;
-    dom.editorWrap.hidden = false;
+    if (dom.emptyState) dom.emptyState.hidden = true;
+    if (dom.editorWrap) dom.editorWrap.hidden = false;
     dom.fmtBtns.forEach(b => b.hidden = false);
-    dom.fmtDivider.hidden = false;
-    dom.btnExport.hidden = false;
-    dom.btnPreview.hidden = false;
-    dom.toolbarTitle.textContent = ch.title || t('chapter');
+    if (dom.fmtDivider) dom.fmtDivider.hidden = false;
+    if (dom.btnExport) dom.btnExport.hidden = false;
+    if (dom.btnPreview) dom.btnPreview.hidden = false;
+    if (dom.toolbarTitle) dom.toolbarTitle.textContent = ch.title || t('chapter');
 
     if (!isPreview) {
-      dom.editor.hidden = false;
-      dom.preview.hidden = true;
-      const pos = dom.editor.selectionStart;
-      dom.editor.value = ch.content || '';
-      dom.editor.setSelectionRange(pos, pos);
+      if (dom.editor) dom.editor.hidden = false;
+      if (dom.preview) dom.preview.hidden = true;
+      if (dom.editor) {
+        const pos = dom.editor.selectionStart || 0;
+        dom.editor.value = ch.content || '';
+        dom.editor.setSelectionRange(pos, pos);
+      }
     } else {
-      dom.editor.hidden = true;
-      dom.preview.hidden = false;
+      if (dom.editor) dom.editor.hidden = true;
+      if (dom.preview) dom.preview.hidden = false;
       renderPreview(ch.content || '');
     }
   }
 
   function renderPreview(md) {
+    if (!dom.preview) return;
     if (typeof marked !== 'undefined') {
       dom.preview.innerHTML = marked.parse(md);
     } else {
@@ -186,9 +195,9 @@
     if (!proj) return;
     const chapters = proj.chapters || [];
     const ch = chapters.find(c => c.id === activeChapterId);
-    dom.statChapter.textContent = ch ? wordCount(ch.content || '').toLocaleString() : '0';
+    if (dom.statChapter) dom.statChapter.textContent = ch ? wordCount(ch.content || '').toLocaleString() : '0';
     const total = chapters.reduce((s, c) => s + wordCount(c.content || ''), 0);
-    dom.statTotal.textContent = total.toLocaleString();
+    if (dom.statTotal) dom.statTotal.textContent = total.toLocaleString();
   }
 
   function renderAll() {
@@ -199,13 +208,15 @@
 
   // ============ PROJECT CRUD ============
   function createProject() {
-    const title = $('#inp-proj-title').value.trim();
+    const titleInp = $('#inp-proj-title');
+    if (!titleInp) return;
+    const title = titleInp.value.trim();
     if (!title) return;
     const proj = {
       id: Storage.uid(),
       title,
-      author: $('#inp-proj-author').value.trim(),
-      description: $('#inp-proj-desc').value.trim(),
+      author: $('#inp-proj-author')?.value.trim() || '',
+      description: $('#inp-proj-desc')?.value.trim() || '',
       chapters: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -215,9 +226,9 @@
     activeChapterId = null;
     Storage.saveSettings({ lastProject: proj.id, lastChapter: null });
     closeModal();
-    $('#inp-proj-title').value = '';
-    $('#inp-proj-author').value = '';
-    $('#inp-proj-desc').value = '';
+    titleInp.value = '';
+    if ($('#inp-proj-author')) $('#inp-proj-author').value = '';
+    if ($('#inp-proj-desc')) $('#inp-proj-desc').value = '';
     renderAll();
   }
 
@@ -246,13 +257,16 @@
     const proj = Storage.getProject(id);
     if (!proj) return;
     renameTarget = { type: 'project', id };
-    $('#inp-rename-proj').value = proj.title;
+    const inp = $('#inp-rename-proj');
+    if (inp) inp.value = proj.title;
     openModal('modal-rename-project');
   }
 
   function saveRenameProject() {
     if (!renameTarget || renameTarget.type !== 'project') return;
-    const title = $('#inp-rename-proj').value.trim();
+    const inp = $('#inp-rename-proj');
+    if (!inp) return;
+    const title = inp.value.trim();
     if (!title) return;
     const proj = Storage.getProject(renameTarget.id);
     if (proj) {
@@ -268,7 +282,8 @@
     const proj = Storage.getProject(activeProjectId);
     if (!proj) return;
     if (!proj.chapters) proj.chapters = [];
-    const title = $('#inp-ch-title').value.trim() || `${t('chapter')} ${proj.chapters.length + 1}`;
+    const inp = $('#inp-ch-title');
+    const title = inp?.value.trim() || `${t('chapter')} ${proj.chapters.length + 1}`;
     const ch = {
       id: Storage.uid(),
       title,
@@ -283,9 +298,9 @@
     isPreview = false;
     Storage.saveSettings({ lastChapter: ch.id });
     closeModal();
-    $('#inp-ch-title').value = '';
+    if (inp) inp.value = '';
     renderAll();
-    setTimeout(() => dom.editor.focus(), 50);
+    setTimeout(() => dom.editor?.focus(), 50);
   }
 
   function deleteChapter(id) {
@@ -309,7 +324,7 @@
     renderChapters();
     renderEditor();
     closeSidebar();
-    setTimeout(() => dom.editor.focus(), 50);
+    setTimeout(() => dom.editor?.focus(), 50);
   }
 
   function renameChapter(id) {
@@ -317,13 +332,16 @@
     const ch = proj?.chapters?.find(c => c.id === id);
     if (!ch) return;
     renameTarget = { type: 'chapter', id };
-    $('#inp-rename-ch').value = ch.title;
+    const inp = $('#inp-rename-ch');
+    if (inp) inp.value = ch.title;
     openModal('modal-rename-chapter');
   }
 
   function saveRenameChapter() {
     if (!renameTarget || renameTarget.type !== 'chapter') return;
-    const title = $('#inp-rename-ch').value.trim();
+    const inp = $('#inp-rename-ch');
+    if (!inp) return;
+    const title = inp.value.trim();
     if (!title) return;
     const proj = Storage.getProject(activeProjectId);
     const ch = proj?.chapters?.find(c => c.id === renameTarget.id);
@@ -381,7 +399,6 @@
     const tgtIdx = proj.chapters.findIndex(c => c.id === targetId);
     if (srcIdx < 0 || tgtIdx < 0) return;
 
-    // Swap order values
     const srcOrder = proj.chapters[srcIdx].order;
     proj.chapters[srcIdx].order = proj.chapters[tgtIdx].order;
     proj.chapters[tgtIdx].order = srcOrder;
@@ -399,13 +416,13 @@
 
   // ============ EDITOR ============
   function saveCurrentChapter() {
-    if (!activeChapterId || !activeProjectId) return;
+    if (!activeChapterId || !activeProjectId || !dom.editor) return;
     const proj = Storage.getProject(activeProjectId);
     if (!proj) return;
     const ch = proj.chapters?.find(c => c.id === activeChapterId);
     if (!ch) return;
     const newContent = dom.editor.value;
-    if (ch.content === newContent) return; // No change
+    if (ch.content === newContent) return;
     ch.content = newContent;
     ch.updatedAt = new Date().toISOString();
     Storage.saveProject(proj);
@@ -413,9 +430,10 @@
   }
 
   function showSaving() {
+    if (!dom.saveIndicator) return;
     dom.saveIndicator.hidden = false;
     clearTimeout(showSaving._t);
-    showSaving._t = setTimeout(() => dom.saveIndicator.hidden = true, 1500);
+    showSaving._t = setTimeout(() => { if (dom.saveIndicator) dom.saveIndicator.hidden = true; }, 1500);
   }
 
   function autoSave() {
@@ -428,6 +446,7 @@
 
   function insertMarkdown(before, after = '') {
     const ta = dom.editor;
+    if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const selected = ta.value.substring(start, end);
@@ -440,11 +459,11 @@
   function handleTab(e) {
     e.preventDefault();
     const ta = dom.editor;
+    if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
 
     if (e.shiftKey) {
-      // Un-indent (remove 2 leading spaces)
       const before = ta.value.substring(0, start);
       const lineStart = before.lastIndexOf('\n') + 1;
       const linePrefix = ta.value.substring(lineStart, start);
@@ -452,7 +471,6 @@
         ta.setRangeText('', lineStart, lineStart + 2, 'end');
       }
     } else {
-      // Indent (add 2 spaces)
       ta.setRangeText('  ', start, end, 'end');
     }
     autoSave();
@@ -467,12 +485,12 @@
 
   // ============ SIDEBAR ============
   function openSidebar() {
-    dom.sidebar.classList.add('open');
-    dom.overlay.hidden = false;
+    if (dom.sidebar) dom.sidebar.classList.add('open');
+    if (dom.overlay) dom.overlay.hidden = false;
   }
   function closeSidebar() {
-    dom.sidebar.classList.remove('open');
-    dom.overlay.hidden = true;
+    if (dom.sidebar) dom.sidebar.classList.remove('open');
+    if (dom.overlay) dom.overlay.hidden = true;
   }
 
   // ============ THEME ============
@@ -485,9 +503,10 @@
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
-    $('#btn-theme').textContent = theme === 'dark' ? '☀️' : '🌙';
+    const btn = $('#btn-theme');
+    if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
     const meta = $('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'dark' ? '#111118' : '#fafafa';
+    if (meta) meta.content = theme === 'dark' ? '#121214' : '#fafafa';
   }
 
   // ============ EXPORT ============
@@ -711,30 +730,32 @@
   // ============ SETTINGS ============
   function applyFontSize(size) {
     document.documentElement.style.setProperty('--editor-size', size + 'px');
-    $('#fontsize-val').textContent = size + 'px';
-    $('#set-fontsize').value = size;
+    const val = $('#fontsize-val');
+    if (val) val.textContent = size + 'px';
+    const inp = $('#set-fontsize');
+    if (inp) inp.value = size;
   }
 
   function applyAutoSave(delay) {
     autoSaveDelay = delay;
-    $('#autosave-val').textContent = (delay / 1000).toFixed(1) + 's';
-    $('#set-autosave').value = delay;
+    const val = $('#autosave-val');
+    if (val) val.textContent = (delay / 1000).toFixed(1) + 's';
+    const inp = $('#set-autosave');
+    if (inp) inp.value = delay;
   }
 
   // ============ EVENTS ============
   function bindEvents() {
-    // Menu mobile toggle
-    $('#btn-open-sidebar').addEventListener('click', openSidebar);
-    $('#btn-close-sidebar').addEventListener('click', closeSidebar);
-    dom.overlay.addEventListener('click', closeSidebar);
+    $('#btn-open-sidebar')?.addEventListener('click', openSidebar);
+    $('#btn-close-sidebar')?.addEventListener('click', closeSidebar);
+    dom.overlay?.addEventListener('click', closeSidebar);
 
-    // Project Events
-    $('#btn-new-project').addEventListener('click', () => openModal('modal-project'));
-    $('#btn-empty-new').addEventListener('click', () => openModal('modal-project'));
-    $('#btn-create-project').addEventListener('click', createProject);
-    $('#btn-save-rename-proj').addEventListener('click', saveRenameProject);
+    $('#btn-new-project')?.addEventListener('click', () => openModal('modal-project'));
+    $('#btn-empty-new')?.addEventListener('click', () => openModal('modal-project'));
+    $('#btn-create-project')?.addEventListener('click', createProject);
+    $('#btn-save-rename-proj')?.addEventListener('click', saveRenameProject);
 
-    dom.projectList.addEventListener('click', (e) => {
+    dom.projectList?.addEventListener('click', (e) => {
       const del = e.target.closest('[data-del-proj]');
       if (del) { e.stopPropagation(); deleteProject(del.dataset.delProj); return; }
       const ren = e.target.closest('[data-rename-proj]');
@@ -743,12 +764,11 @@
       if (li) selectProject(li.dataset.id);
     });
 
-    // Chapter Events
-    $('#btn-new-chapter').addEventListener('click', () => openModal('modal-chapter'));
-    $('#btn-create-chapter').addEventListener('click', createChapter);
-    $('#btn-save-rename-ch').addEventListener('click', saveRenameChapter);
+    $('#btn-new-chapter')?.addEventListener('click', () => openModal('modal-chapter'));
+    $('#btn-create-chapter')?.addEventListener('click', createChapter);
+    $('#btn-save-rename-ch')?.addEventListener('click', saveRenameChapter);
 
-    dom.chapterList.addEventListener('click', (e) => {
+    dom.chapterList?.addEventListener('click', (e) => {
       const del = e.target.closest('[data-del-ch]');
       if (del) { e.stopPropagation(); deleteChapter(del.dataset.delCh); return; }
       const ren = e.target.closest('[data-rename-ch]');
@@ -757,23 +777,22 @@
       if (li) selectChapter(li.dataset.id);
     });
 
-    // Editor AutoSave & Formatting
-    dom.editor.addEventListener('input', autoSave);
-    dom.editor.addEventListener('keydown', (e) => {
+    dom.editor?.addEventListener('input', autoSave);
+    dom.editor?.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') handleTab(e);
     });
 
-    $('#btn-bold').addEventListener('click', () => insertMarkdown('**', '**'));
-    $('#btn-italic').addEventListener('click', () => insertMarkdown('*', '*'));
-    $('#btn-heading').addEventListener('click', () => insertMarkdown('## '));
-    dom.btnPreview.addEventListener('click', togglePreview);
-    $('#btn-theme').addEventListener('click', toggleTheme);
+    $('#btn-bold')?.addEventListener('click', () => insertMarkdown('**', '**'));
+    $('#btn-italic')?.addEventListener('click', () => insertMarkdown('*', '*'));
+    $('#btn-heading')?.addEventListener('click', () => insertMarkdown('## '));
+    dom.btnPreview?.addEventListener('click', togglePreview);
+    $('#btn-theme')?.addEventListener('click', toggleTheme);
 
-    // Export Modal Options
-    dom.btnExport.addEventListener('click', () => openModal('modal-export'));
+    dom.btnExport?.addEventListener('click', () => openModal('modal-export'));
     $$('.btn-export-opt').forEach(btn => {
       btn.addEventListener('click', () => {
-        const scope = $('input[name="exp-scope"]:checked').value;
+        const checked = $('input[name="exp-scope"]:checked');
+        const scope = checked ? checked.value : 'chapter';
         const fmt = btn.dataset.format;
         if (fmt === 'md') exportMarkdown(scope);
         else if (fmt === 'pdf') exportPDF(scope);
@@ -781,81 +800,76 @@
       });
     });
 
-    // Settings Modal
-    $('#btn-settings').addEventListener('click', () => {
+    $('#btn-settings')?.addEventListener('click', () => {
       const s = Storage.getSettings();
-      $('#set-lang').value = s.lang;
+      const langSel = $('#set-lang');
+      if (langSel) langSel.value = s.lang;
       applyFontSize(s.fontSize);
       applyAutoSave(s.autoSaveDelay || 1000);
       openModal('modal-settings');
     });
 
-    $('#set-lang').addEventListener('change', (e) => {
+    $('#set-lang')?.addEventListener('change', (e) => {
       applyLanguage(e.target.value);
       Storage.saveSettings({ lang: e.target.value });
       renderAll();
     });
 
-    $('#set-fontsize').addEventListener('input', (e) => {
+    $('#set-fontsize')?.addEventListener('input', (e) => {
       const size = parseInt(e.target.value);
       applyFontSize(size);
       Storage.saveSettings({ fontSize: size });
     });
 
-    $('#set-autosave').addEventListener('input', (e) => {
+    $('#set-autosave')?.addEventListener('input', (e) => {
       const delay = parseInt(e.target.value);
       applyAutoSave(delay);
       Storage.saveSettings({ autoSaveDelay: delay });
     });
 
-    // Backup / Restore Buttons
-    $('#btn-backup').addEventListener('click', backupData);
-    $('#btn-restore').addEventListener('click', () => $('#inp-restore').click());
-    $('#inp-restore').addEventListener('change', (e) => {
+    $('#btn-backup')?.addEventListener('click', backupData);
+    $('#btn-restore')?.addEventListener('click', () => $('#inp-restore')?.click());
+    $('#inp-restore')?.addEventListener('change', (e) => {
       if (e.target.files[0]) restoreData(e.target.files[0]);
       e.target.value = '';
     });
 
-    // Modal Closing Behavior
     $$('[data-close]').forEach(btn => btn.addEventListener('click', closeModal));
-    dom.modalOverlay.addEventListener('click', (e) => {
+    dom.modalOverlay?.addEventListener('click', (e) => {
       if (e.target === dom.modalOverlay) closeModal();
     });
 
-    $('#btn-confirm-yes').addEventListener('click', () => {
+    $('#btn-confirm-yes')?.addEventListener('click', () => {
       closeModal();
       if (confirmCallback) { confirmCallback(); confirmCallback = null; }
     });
 
-    // Keyboard Shortcuts
     document.addEventListener('keydown', (e) => {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key === 's') { e.preventDefault(); saveCurrentChapter(); toast(t('saved')); }
       if (mod && e.key === 'e') { e.preventDefault(); togglePreview(); }
-      if (mod && e.key === 'b' && !dom.editor.hidden) { e.preventDefault(); insertMarkdown('**', '**'); }
-      if (mod && e.key === 'i' && !dom.editor.hidden) { e.preventDefault(); insertMarkdown('*', '*'); }
+      if (mod && e.key === 'b' && dom.editor && !dom.editor.hidden) { e.preventDefault(); insertMarkdown('**', '**'); }
+      if (mod && e.key === 'i' && dom.editor && !dom.editor.hidden) { e.preventDefault(); insertMarkdown('*', '*'); }
       if (e.key === 'Escape') closeModal();
     });
 
-    // Enter Key on Rename Inputs
-    $('#inp-proj-title').addEventListener('keydown', (e) => { if (e.key === 'Enter') createProject(); });
-    $('#inp-ch-title').addEventListener('keydown', (e) => { if (e.key === 'Enter') createChapter(); });
-    $('#inp-rename-proj').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveRenameProject(); });
-    $('#inp-rename-ch').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveRenameChapter(); });
+    $('#inp-proj-title')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') createProject(); });
+    $('#inp-ch-title')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') createChapter(); });
+    $('#inp-rename-proj')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveRenameProject(); });
+    $('#inp-rename-ch')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveRenameChapter(); });
   }
 
   // ============ REGISTER PWA SERVICE WORKER ============
   function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(() => console.log('ServiceWorker registered'))
-          .catch(err => console.warn('ServiceWorker registration failed: ', err));
+        navigator.serviceWorker.register('./sw.js')
+          .catch(() => {});
       });
     }
   }
 
-  // ============ INITIALIZE ============
+  // ============ INIT ============
   function init() {
     const s = Storage.getSettings();
     applyTheme(s.theme);
@@ -867,7 +881,7 @@
     registerServiceWorker();
 
     if (activeChapterId) {
-      setTimeout(() => dom.editor.focus(), 100);
+      setTimeout(() => dom.editor?.focus(), 100);
     }
   }
 
