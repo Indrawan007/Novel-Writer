@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Novel Writer</title>
+  <meta name="description" content="Minimalist novel writing app — write anywhere, anytime.">
+  <meta name="theme-color" content="#13131a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍️</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+</head>
+<body>
+
+  <!-- ====== APP SHELL ====== -->
+  <div id="app">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">✍️ <span data-i18n="appTitle">Novel Writer</span></h1>
+        <button id="btn-close-sidebar" class="icon-btn" aria-label="Close">✕</button>
+      </div>
+
+      <!-- Projects -->
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span data-i18n="projects">Proyek</span>
+          <button id="btn-new-project" class="icon-btn" title="New Project">＋</button>
+        </div>
+        <ul id="project-list" class="item-list"></ul>
+      </div>
+
+      <!-- Chapters -->
+      <div class="sidebar-section" id="chapter-section" hidden>
+        <div class="section-header">
+          <span data-i18n="chapters">Bab</span>
+          <div class="section-actions">
+            <button id="btn-sort-chapters" class="icon-btn-sm" title="Sort">⇅</button>
+            <button id="btn-new-chapter" class="icon-btn-sm" title="New Chapter">＋</button>
+          </div>
+        </div>
+        <ul id="chapter-list" class="item-list" data-sortable></ul>
+      </div>
+
+      <!-- Stats Footer -->
+      <div class="sidebar-footer" id="sidebar-footer" hidden>
+        <div class="stat-row">
+          <span data-i18n="chapterWords">Kata (bab)</span>
+          <strong id="stat-chapter">0</strong>
+        </div>
+        <div class="stat-row">
+          <span data-i18n="totalWords">Total kata</span>
+          <strong id="stat-total">0</strong>
+        </div>
+        <div class="stat-row">
+          <span data-i18n="chapters">Bab</span>
+          <strong id="stat-chapters">0</strong>
+        </div>
+      </div>
+    </aside>
+
+    <!-- OVERLAY (mobile) -->
+    <div id="sidebar-overlay" hidden></div>
+
+    <!-- MAIN -->
+    <main id="main">
+      <!-- Toolbar -->
+      <header id="toolbar">
+        <button id="btn-open-sidebar" class="icon-btn" aria-label="Menu">☰</button>
+        <span id="toolbar-title" data-i18n="selectChapter">Pilih bab untuk mulai menulis</span>
+        <div class="toolbar-right">
+          <div class="fmt-group" id="fmt-group" hidden>
+            <button id="btn-bold" class="icon-btn fmt-btn" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button id="btn-italic" class="icon-btn fmt-btn" title="Italic (Ctrl+I)"><i>I</i></button>
+            <button id="btn-heading" class="icon-btn fmt-btn" title="Heading">H</button>
+            <span class="toolbar-divider"></span>
+            <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)">👁️</button>
+          </div>
+          <button id="btn-export" class="icon-btn" title="Export (Ctrl+Shift+E)" hidden>📤</button>
+          <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
+          <button id="btn-theme" class="icon-btn" title="Toggle Theme">🌙</button>
+        </div>
+      </header>
+
+      <!-- Editor -->
+      <div id="editor-wrap" hidden>
+        <div id="editor-meta" hidden>
+          <input type="text" id="editor-chapter-title" class="chapter-title-input" placeholder="Judul bab...">
+        </div>
+        <textarea id="editor" data-i18n-placeholder="editorPlaceholder" placeholder="Mulai menulis... (Mendukung Markdown)" spellcheck="true"></textarea>
+        <div id="preview" class="prose" hidden></div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state">
+        <div class="empty-icon">📖</div>
+        <h2 data-i18n="welcomeTitle">Selamat Datang di Novel Writer</h2>
+        <p data-i18n="welcomeDesc">Buat proyek baru untuk mulai menulis novelmu.</p>
+        <button id="btn-empty-new" class="btn-primary" data-i18n="newProject">Proyek Baru</button>
+        <p class="empty-hint" data-i18n="offlineReady">📡 Siap digunakan offline</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ====== MODALS ====== -->
+  <div id="modal-overlay" hidden>
+
+    <!-- New Project -->
+    <div id="modal-project" class="modal" hidden>
+      <h2 data-i18n="newProject">Proyek Baru</h2>
+      <label data-i18n="title">Judul</label>
+      <input type="text" id="inp-proj-title" maxlength="100" required autofocus>
+      <label data-i18n="author">Penulis</label>
+      <input type="text" id="inp-proj-author" maxlength="60">
+      <label data-i18n="description">Deskripsi</label>
+      <textarea id="inp-proj-desc" rows="2" maxlength="300"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
+        <button class="btn-primary" id="btn-create-project" data-i18n="create">Buat</button>
+      </div>
+    </div>
+
+    <!-- New Chapter -->
+    <div id="modal-chapter" class="modal" hidden>
+      <h2 data-i18n="newChapter">Bab Baru</h2>
+      <label data-i18n="chapterTitle">Judul Bab</label>
+      <input type="text" id="inp-ch-title" maxlength="100" autofocus>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
+        <button class="btn-primary" id="btn-create-chapter" data-i18n="create">Buat</button>
+      </div>
+    </div>
+
+    <!-- Rename -->
+    <div id="modal-rename" class="modal" hidden>
+      <h2 id="rename-title" data-i18n="rename">Ganti Nama</h2>
+      <input type="text" id="inp-rename" maxlength="100" autofocus>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
+        <button class="btn-primary" id="btn-save-rename" data-i18n="save">Simpan</button>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div id="modal-export" class="modal" hidden>
+      <h2 data-i18n="export">Ekspor</h2>
+      <div class="export-scope">
+        <label><input type="radio" name="exp-scope" value="chapter" checked> <span data-i18n="currentChapter">Bab saat ini</span></label>
+        <label><input type="radio" name="exp-scope" value="all"> <span data-i18n="entireNovel">Seluruh novel</span></label>
+      </div>
+      <div class="export-formats">
+        <button class="btn-export-opt" data-format="md">
+          <span class="export-icon">📄</span>
+          <span>Markdown <small>(.md)</small></span>
+        </button>
+        <button class="btn-export-opt" data-format="pdf">
+          <span class="export-icon">📕</span>
+          <span>PDF <small>(.pdf)</small></span>
+        </button>
+        <button class="btn-export-opt" data-format="docx">
+          <span class="export-icon">📘</span>
+          <span>Word <small>(.docx)</small></span>
+        </button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="close">Tutup</button>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="modal-settings" class="modal modal-wide" hidden>
+      <h2 data-i18n="settings">Pengaturan</h2>
+
+      <div class="setting-row">
+        <label data-i18n="language">Bahasa</label>
+        <select id="set-lang">
+          <option value="id">🇮🇩 Indonesia</option>
+          <option value="en">🇬🇧 English</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <label><span data-i18n="fontSize">Ukuran Font</span>: <strong id="fontsize-val">18px</strong></label>
+        <input type="range" id="set-fontsize" min="14" max="28" value="18" step="1">
+      </div>
+
+      <div class="setting-row">
+        <label data-i18n="lineHeight">Tinggi Baris</label>
+        <select id="set-lineheight">
+          <option value="1.6">Compact (1.6)</option>
+          <option value="1.8" selected>Normal (1.8)</option>
+          <option value="2.0">Relaxed (2.0)</option>
+          <option value="2.2">Spacious (2.2)</option>
+        </select>
+      </div>
+
+      <hr>
+
+      <div class="setting-row">
+        <label data-i18n="backupRestore">Cadangan & Pulihkan</label>
+        <div class="backup-btns">
+          <button class="btn-ghost" id="btn-backup" data-i18n="backupData">💾 Cadangkan</button>
+          <button class="btn-ghost" id="btn-restore" data-i18n="restoreData">📂 Pulihkan</button>
+          <input type="file" id="inp-restore" accept=".json" hidden>
+        </div>
+      </div>
+
+      <hr>
+
+      <div class="setting-row">
+        <label data-i18n="shortcuts">Pintasan Keyboard</label>
+        <div class="shortcuts-list">
+          <div><kbd>Ctrl</kbd>+<kbd>S</kbd> <span data-i18n="shortcutSave">Simpan</span></div>
+          <div><kbd>Ctrl</kbd>+<kbd>B</kbd> <span>Bold</span></div>
+          <div><kbd>Ctrl</kbd>+<kbd>I</kbd> <span>Italic</span></div>
+          <div><kbd>Ctrl</kbd>+<kbd>E</kbd> <span data-i18n="shortcutPreview">Preview</span></div>
+          <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> <span data-i18n="shortcutExport">Ekspor</span></div>
+          <div><kbd>Esc</kbd> <span data-i18n="shortcutClose">Tutup modal</span></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="close">Tutup</button>
+      </div>
+    </div>
+
+    <!-- Confirm -->
+    <div id="modal-confirm" class="modal" hidden>
+      <h2 data-i18n="confirm">Konfirmasi</h2>
+      <p id="confirm-msg"></p>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
+        <button class="btn-danger" id="btn-confirm-yes" data-i18n="delete">Hapus</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" hidden></div>
+
+  <!-- Autosave indicator -->
+  <div id="autosave-indicator" hidden>
+    <span class="save-dot"></span>
+    <span data-i18n="saving">Menyimpan...</span>
+  </div>
+
+  <script src="js/i18n.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
