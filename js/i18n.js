@@ -128,3 +128,4 @@ function applyLanguage(lang) {
     el.placeholder = t(el.dataset.i18nPlaceholder);
   });
 }
+

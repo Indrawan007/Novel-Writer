@@ -72,10 +72,6 @@
     URL.revokeObjectURL(url);
   }
 
-  function sanitizeFilename(name) {
-    return name.replace(/[<>:"/\\|?*]/g, '_').trim() || 'novel';
-  }
-
   // ============ MODAL ============
   function openModal(id) {
     $$('.modal').forEach(m => m.hidden = true);
@@ -170,9 +166,9 @@
       if (dom.editor) dom.editor.hidden = false;
       if (dom.preview) dom.preview.hidden = true;
       if (dom.editor) {
-        const pos = dom.editor.selectionStart || 0;
         dom.editor.value = ch.content || '';
-        dom.editor.setSelectionRange(pos, pos);
+        // Kursor di akhir konten — posisi lama adalah milik bab sebelumnya
+        dom.editor.setSelectionRange(dom.editor.value.length, dom.editor.value.length);
       }
     } else {
       if (dom.editor) dom.editor.hidden = true;
@@ -395,15 +391,20 @@
     const proj = Storage.getProject(activeProjectId);
     if (!proj || !proj.chapters) return;
 
-    const srcIdx = proj.chapters.findIndex(c => c.id === dragSrcId);
-    const tgtIdx = proj.chapters.findIndex(c => c.id === targetId);
+    const chapters = [...proj.chapters].sort((a, b) => a.order - b.order);
+    let srcIdx = chapters.findIndex(c => c.id === dragSrcId);
+    let tgtIdx = chapters.findIndex(c => c.id === targetId);
     if (srcIdx < 0 || tgtIdx < 0) return;
 
-    const srcOrder = proj.chapters[srcIdx].order;
-    proj.chapters[srcIdx].order = proj.chapters[tgtIdx].order;
-    proj.chapters[tgtIdx].order = srcOrder;
+    // Setengah atas target = sisipkan sebelum, setengah bawah = sisipkan setelah
+    const rect = this.getBoundingClientRect();
+    const insertAfter = (e.clientY - rect.top) > rect.height / 2;
 
-    Storage.saveProject(proj);
+    const [moved] = chapters.splice(srcIdx, 1);
+    if (srcIdx < tgtIdx) tgtIdx -= 1;
+    chapters.splice(insertAfter ? tgtIdx + 1 : tgtIdx, 0, moved);
+
+    Storage.reorderChapters(activeProjectId, chapters.map(c => c.id));
     renderChapters();
   }
 
@@ -506,194 +507,12 @@
     const btn = $('#btn-theme');
     if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
     const meta = $('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'dark' ? '#121214' : '#fafafa';
+    if (meta) meta.content = theme === 'dark' ? '#121214' : '#f4f4f5';
   }
 
   // ============ EXPORT ============
-  function getExportContent(scope) {
-    const proj = Storage.getProject(activeProjectId);
-    if (!proj || !proj.chapters?.length) return null;
-
-    if (scope === 'chapter') {
-      const ch = proj.chapters.find(c => c.id === activeChapterId);
-      if (!ch) return null;
-      return { title: ch.title, content: ch.content, author: proj.author, projTitle: proj.title };
-    }
-
-    const sorted = [...proj.chapters].sort((a, b) => a.order - b.order);
-    const full = sorted.map(ch => `# ${ch.title}\n\n${ch.content}`).join('\n\n---\n\n');
-    return { title: proj.title, content: full, author: proj.author, projTitle: proj.title };
-  }
-
-  function exportMarkdown(scope) {
-    const data = getExportContent(scope);
-    if (!data) return toast(t('noChapter'));
-    const header = `# ${data.title}\n${data.author ? `**${data.author}**\n` : ''}\n---\n\n`;
-    const blob = new Blob([header + data.content], { type: 'text/markdown;charset=utf-8' });
-    downloadBlob(blob, `${sanitizeFilename(data.title)}.md`);
-    toast(t('exported'));
-    closeModal();
-  }
-
-  async function exportPDF(scope) {
-    const data = getExportContent(scope);
-    if (!data) return toast(t('noChapter'));
-    closeModal();
-    toast(t('loading'), 8000);
-
-    if (!window.html2pdf) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-    }
-
-    const htmlContent = typeof marked !== 'undefined' ? marked.parse(data.content) : `<pre>${escHtml(data.content)}</pre>`;
-    const container = document.createElement('div');
-    container.style.cssText = 'font-family:Georgia,"Times New Roman",serif;font-size:12pt;line-height:1.8;color:#111;padding:20px;max-width:600px;';
-    container.innerHTML = `
-      <h1 style="text-align:center;font-size:24pt;margin-bottom:4px;font-family:sans-serif;">${escHtml(data.title)}</h1>
-      ${data.author ? `<p style="text-align:center;color:#555;margin-bottom:40px;font-size:14pt;">${escHtml(data.author)}</p>` : '<div style="margin-bottom:30px"></div>'}
-      ${htmlContent}
-    `;
-    document.body.appendChild(container);
-
-    try {
-      await html2pdf().set({
-        margin: [20, 18, 20, 18],
-        filename: `${sanitizeFilename(data.title)}.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      }).from(container).save();
-      toast(t('exported'));
-    } catch (err) {
-      console.error('PDF export error:', err);
-      toast('Export failed');
-    } finally {
-      document.body.removeChild(container);
-    }
-  }
-
-  async function exportDocx(scope) {
-    const data = getExportContent(scope);
-    if (!data) return toast(t('noChapter'));
-    closeModal();
-    toast(t('loading'), 8000);
-
-    if (!window.docx) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://unpkg.com/docx@8.5.0/build/index.umd.js';
-        s.onload = res; s.onerror = rej;
-        document.head.appendChild(s);
-      });
-    }
-
-    const { Document, Paragraph, TextRun, HeadingLevel, Packer, AlignmentType } = docx;
-
-    function parseInline(text) {
-      const runs = [];
-      const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
-      let last = 0, m;
-      while ((m = regex.exec(text)) !== null) {
-        if (m.index > last) {
-          runs.push(new TextRun({ text: text.slice(last, m.index), font: 'Georgia', size: 24 }));
-        }
-        if (m[2]) {
-          runs.push(new TextRun({ text: m[2], bold: true, font: 'Georgia', size: 24 }));
-        } else if (m[3]) {
-          runs.push(new TextRun({ text: m[3], italics: true, font: 'Georgia', size: 24 }));
-        }
-        last = regex.lastIndex;
-      }
-      if (last < text.length) {
-        runs.push(new TextRun({ text: text.slice(last), font: 'Georgia', size: 24 }));
-      }
-      return runs.length ? runs : [new TextRun({ text: text, font: 'Georgia', size: 24 })];
-    }
-
-    function parseContent(text) {
-      const lines = text.split('\n');
-      const paragraphs = [];
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          paragraphs.push(new Paragraph({ spacing: { after: 120 } }));
-          continue;
-        }
-
-        if (trimmed.startsWith('# ')) {
-          paragraphs.push(new Paragraph({
-            heading: HeadingLevel.HEADING_1,
-            spacing: { before: 400, after: 200 },
-            children: [new TextRun({ text: trimmed.slice(2), bold: true, size: 36, font: 'Georgia' })]
-          }));
-          continue;
-        }
-        if (trimmed.startsWith('## ')) {
-          paragraphs.push(new Paragraph({
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 300, after: 150 },
-            children: [new TextRun({ text: trimmed.slice(3), bold: true, size: 28, font: 'Georgia' })]
-          }));
-          continue;
-        }
-        if (trimmed === '---') {
-          paragraphs.push(new Paragraph({
-            spacing: { before: 200, after: 200 },
-            children: [new TextRun({ text: '— — —', color: '999999', font: 'Georgia' })],
-            alignment: AlignmentType.CENTER
-          }));
-          continue;
-        }
-
-        const runs = parseInline(trimmed);
-        paragraphs.push(new Paragraph({
-          spacing: { after: 120, line: 360 },
-          indent: { firstLine: 480 },
-          alignment: AlignmentType.JUSTIFIED,
-          children: runs
-        }));
-      }
-      return paragraphs;
-    }
-
-    const children = [
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 120 },
-        children: [new TextRun({ text: data.title, bold: true, size: 48, font: 'Georgia' })]
-      })
-    ];
-
-    if (data.author) {
-      children.push(new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 600 },
-        children: [new TextRun({ text: data.author, size: 24, color: '666666', font: 'Georgia' })]
-      }));
-    }
-
-    children.push(...parseContent(data.content));
-
-    const doc = new Document({
-      sections: [{ properties: {}, children }]
-    });
-
-    try {
-      const blob = await Packer.toBlob(doc);
-      downloadBlob(blob, `${sanitizeFilename(data.title)}.docx`);
-      toast(t('exported'));
-    } catch (err) {
-      console.error(err);
-      toast('Export failed');
-    }
-  }
+  // Logika ekspor (Markdown / PDF / DOCX) berada di modul Exporter (js/export.js).
+  // Handler tombolnya ada di bagian EVENTS di bawah.
 
   // ============ BACKUP / RESTORE ============
   function backupData() {
@@ -716,6 +535,7 @@
         applyTheme(data.settings.theme);
         applyLanguage(data.settings.lang);
         applyFontSize(data.settings.fontSize);
+        applyLineHeight(data.settings.lineHeight || 1.8);
         applyAutoSave(autoSaveDelay);
         renderAll();
         toast(t('restoreDone'));
@@ -734,6 +554,14 @@
     if (val) val.textContent = size + 'px';
     const inp = $('#set-fontsize');
     if (inp) inp.value = size;
+  }
+
+  function applyLineHeight(lh) {
+    document.documentElement.style.setProperty('--editor-lh', lh);
+    const val = $('#lineheight-val');
+    if (val) val.textContent = Number(lh).toFixed(1);
+    const inp = $('#set-lineheight');
+    if (inp) inp.value = lh;
   }
 
   function applyAutoSave(delay) {
@@ -790,13 +618,32 @@
 
     dom.btnExport?.addEventListener('click', () => openModal('modal-export'));
     $$('.btn-export-opt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const checked = $('input[name="exp-scope"]:checked');
-        const scope = checked ? checked.value : 'chapter';
+      btn.addEventListener('click', async () => {
+        const scope = $('input[name="exp-scope"]:checked')?.value || 'chapter';
         const fmt = btn.dataset.format;
-        if (fmt === 'md') exportMarkdown(scope);
-        else if (fmt === 'pdf') exportPDF(scope);
-        else if (fmt === 'docx') exportDocx(scope);
+        if (fmt !== 'md' && fmt !== 'pdf' && fmt !== 'docx') return;
+
+        // Pastikan konten terbaru ikut ter-ekspor (mengisi jeda auto-save)
+        saveCurrentChapter();
+
+        const isAsync = fmt === 'pdf' || fmt === 'docx';
+        if (isAsync) {
+          closeModal();
+          toast(t('loading'), 15000);
+        }
+
+        try {
+          const ok = fmt === 'md'
+            ? Exporter.toMarkdown(scope, activeProjectId, activeChapterId)
+            : fmt === 'pdf'
+              ? await Exporter.toPDF(scope, activeProjectId, activeChapterId)
+              : await Exporter.toDocx(scope, activeProjectId, activeChapterId);
+          if (!isAsync && ok) closeModal();
+          toast(ok ? t('exported') : t('noChapter'));
+        } catch (err) {
+          console.error('Export error:', err);
+          toast('Export failed');
+        }
       });
     });
 
@@ -805,6 +652,7 @@
       const langSel = $('#set-lang');
       if (langSel) langSel.value = s.lang;
       applyFontSize(s.fontSize);
+      applyLineHeight(s.lineHeight || 1.8);
       applyAutoSave(s.autoSaveDelay || 1000);
       openModal('modal-settings');
     });
@@ -819,6 +667,12 @@
       const size = parseInt(e.target.value);
       applyFontSize(size);
       Storage.saveSettings({ fontSize: size });
+    });
+
+    $('#set-lineheight')?.addEventListener('input', (e) => {
+      const lh = parseFloat(e.target.value);
+      applyLineHeight(lh);
+      Storage.saveSettings({ lineHeight: lh });
     });
 
     $('#set-autosave')?.addEventListener('input', (e) => {
@@ -861,12 +715,18 @@
 
   // ============ REGISTER PWA SERVICE WORKER ============
   function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .catch(() => {});
-      });
-    }
+    if (!('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(() => {
+          // Tampilkan "siap offline" hanya satu kali
+          if (!localStorage.getItem('nw-offline-ready-shown')) {
+            localStorage.setItem('nw-offline-ready-shown', '1');
+            toast(t('offlineReady'), 3000);
+          }
+        })
+        .catch(() => {});
+    });
   }
 
   // ============ INIT ============
@@ -875,6 +735,7 @@
     applyTheme(s.theme);
     applyLanguage(s.lang);
     applyFontSize(s.fontSize);
+    applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(s.autoSaveDelay || 1000);
     renderAll();
     bindEvents();
@@ -891,3 +752,4 @@
     init();
   }
 })();
+

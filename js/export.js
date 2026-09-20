@@ -107,17 +107,20 @@ const Exporter = {
     `;
     document.body.appendChild(container);
 
-    await html2pdf().set({
-      margin: [20, 18, 20, 18],
-      filename: `${this.sanitize(data.title)}.pdf`,
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-    }).from(container).save();
-
-    document.body.removeChild(container);
-    return true;
+    try {
+      await html2pdf().set({
+        margin: [20, 18, 20, 18],
+        filename: `${this.sanitize(data.title)}.pdf`,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      }).from(container).save();
+      return true;
+    } finally {
+      // Selalu bersihkan container, sekalipun export gagal
+      if (container.parentNode) container.parentNode.removeChild(container);
+    }
   },
 
   /**
@@ -136,8 +139,7 @@ const Exporter = {
 
     const {
       Document, Paragraph, TextRun, HeadingLevel,
-      Packer, AlignmentType, TabStopPosition, TabStopType,
-      convertInchesToTwip
+      Packer, AlignmentType, convertInchesToTwip
     } = docx;
 
     // Parse markdown-ish content into docx paragraphs
@@ -276,7 +278,9 @@ const Exporter = {
   },
 
   sanitize(name) {
-    return name.replace(/[^a-zA-Z0-9\s\-_]/g, '').trim() || 'novel';
+    // Ganti karakter ilegal di nama file dengan "_" (bukan hapus,
+    // supaya judul tetap terbaca di nama file hasil ekspor)
+    return name.replace(/[<>:"/\\|?*]/g, '_').trim() || 'novel';
   },
 
   loadScript(src) {
@@ -289,3 +293,4 @@ const Exporter = {
     });
   }
 };
+

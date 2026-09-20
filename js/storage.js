@@ -12,6 +12,7 @@ const Storage = {
         theme: 'light',
         fontSize: 18,
         lineHeight: 1.8,
+        autoSaveDelay: 1000,
         lang: 'id',
         lastProject: null,
         lastChapter: null

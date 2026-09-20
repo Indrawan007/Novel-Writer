@@ -2,17 +2,23 @@
    Service Worker — Offline Caching
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v2';
+const CACHE_NAME = 'novel-writer-v3';
+
+// URL relatif terhadap lokasi sw.js → aman di sub-path
+// (mis. https://user.github.io/Novel-Writer/) maupun root domain.
+const BASE = new URL('.', self.location.href).href;
 
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/i18n.js',
-  '/js/storage.js',
-  '/js/app.js',
-  '/manifest.json'
-];
+  'index.html',
+  'css/style.css',
+  'js/i18n.js',
+  'js/storage.js',
+  'js/export.js',
+  'js/app.js',
+  'manifest.json',
+  'icons/icon-192.png',
+  'icons/icon-512.png'
+].map(p => BASE + p);
 
 // Install — cache core assets
 self.addEventListener('install', (event) => {
@@ -42,12 +48,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // For CDN resources (marked, html2pdf, docx), use network-first
+  // Untuk resource CDN (marked, html2pdf, docx): network-first
   if (url.hostname.includes('cdn') || url.hostname.includes('unpkg') || url.hostname.includes('cdnjs')) {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Update cache with fresh copy
+          // Update cache dengan salinan terbaru
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           return response;
@@ -57,7 +63,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For local assets, use cache-first
+  // Untuk aset lokal: cache-first
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
