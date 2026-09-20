@@ -341,6 +341,7 @@
       const dark = document.documentElement.dataset.theme === 'dark';
       set(dom.btnTheme, dark ? t('themeToLight') : t('themeToDark'));
     }
+    applySidebarLabels();
   }
 
   // ============ PROJECT CRUD ============
@@ -856,16 +857,68 @@
   }
 
   // ============ SIDEBAR ============
+  /* Desktop: collapse/expand (tersimpan di settings.sidebarCollapsed).
+     Layar sempit: panel off-canvas + overlay (perilaku lama). */
+  const MQ_MOBILE = '(max-width: 880px)';
+
+  function isMobileViewport() {
+    return typeof window.matchMedia === 'function' &&
+      !!window.matchMedia(MQ_MOBILE) && window.matchMedia(MQ_MOBILE).matches;
+  }
+
+  function sidebarCollapsed() {
+    const app = $('#app');
+    return !!app && app.classList.contains('sidebar-collapsed');
+  }
+
+  function setSidebarCollapsed(v, persistIt = true) {
+    const app = $('#app');
+    if (!app) return;
+    app.classList.toggle('sidebar-collapsed', !!v);
+    if (persistIt) persist(Storage.saveSettings({ sidebarCollapsed: !!v }));
+    applySidebarLabels();
+  }
+
   function openSidebar() {
     if (dom.sidebar) dom.sidebar.classList.add('open');
     if (dom.overlay) dom.overlay.hidden = false;
+    applySidebarLabels();
   }
   function closeSidebar() {
     if (dom.sidebar) dom.sidebar.classList.remove('open');
     if (dom.overlay) dom.overlay.hidden = true;
+    applySidebarLabels();
   }
   function sidebarOpen() {
     return !!(dom.sidebar && dom.sidebar.classList.contains('open'));
+  }
+
+  /** Satu tombol untuk dua perilaku sesuai lebar layar. */
+  function toggleSidebar() {
+    if (isMobileViewport()) {
+      if (sidebarOpen()) closeSidebar(); else openSidebar();
+      return;
+    }
+    setSidebarCollapsed(!sidebarCollapsed());
+  }
+
+  /** Label & aria tombol sidebar mengikuti keadaan + bahasa. */
+  function applySidebarLabels() {
+    const btn = $('#btn-open-sidebar');
+    if (!btn) return;
+    let label, expanded;
+    if (isMobileViewport()) {
+      label = t('menu');
+      expanded = sidebarOpen();
+    } else {
+      label = sidebarCollapsed() ? t('showSidebar') : t('hideSidebar');
+      expanded = !sidebarCollapsed();
+    }
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-expanded', String(expanded));
+    const closeBtn = $('#btn-close-sidebar');
+    if (closeBtn) closeBtn.setAttribute('aria-expanded', String(expanded));
   }
 
   // ============ THEME ============
@@ -1004,8 +1057,11 @@
 
   // ============ EVENTS ============
   function bindEvents() {
-    $('#btn-open-sidebar')?.addEventListener('click', openSidebar);
-    $('#btn-close-sidebar')?.addEventListener('click', closeSidebar);
+    $('#btn-open-sidebar')?.addEventListener('click', toggleSidebar);
+    $('#btn-close-sidebar')?.addEventListener('click', () => {
+      if (isMobileViewport()) closeSidebar();
+      else setSidebarCollapsed(true);
+    });
     dom.overlay?.addEventListener('click', closeSidebar);
 
     $('#btn-new-project')?.addEventListener('click', () => openModal('modal-project'));
@@ -1196,6 +1252,17 @@
 
     // ---- Tab lain menulis data ----
     window.addEventListener('storage', onExternalStorage);
+
+    // ---- Lebar layar melewati breakpoint mobile/desktop ----
+    if (typeof window.matchMedia === 'function') {
+      const mq = window.matchMedia(MQ_MOBILE);
+      const onBreak = () => {
+        if (!isMobileViewport()) closeSidebar(); // overlay tidak relevan di desktop
+        applySidebarLabels();
+      };
+      if (mq.addEventListener) mq.addEventListener('change', onBreak);
+      else if (mq.addListener) mq.addListener(onBreak);
+    }
   }
 
   // ============ REGISTER PWA SERVICE WORKER ============
@@ -1238,6 +1305,7 @@
     applyFontSize(s.fontSize);
     applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(s.autoSaveDelay || 1000);
+    setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
     bindEvents();
     registerServiceWorker();

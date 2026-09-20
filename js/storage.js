@@ -26,6 +26,7 @@ const Storage = {
         lineHeight: 1.8,
         autoSaveDelay: 1000,
         lang: 'id',
+        sidebarCollapsed: false,
         lastProject: null,
         lastChapter: null
       }
@@ -151,6 +152,7 @@ const Storage = {
       lineHeight: clamp(s.lineHeight, d.lineHeight, 1.4, 2.2),
       autoSaveDelay: clamp(s.autoSaveDelay, d.autoSaveDelay, 500, 5000),
       lang: s.lang === 'en' ? 'en' : 'id',
+      sidebarCollapsed: s.sidebarCollapsed === true,
       lastProject: typeof s.lastProject === 'string' ? s.lastProject : null,
       lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null
     };

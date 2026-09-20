@@ -81,6 +81,8 @@ const I18N = {
     loading:         "Memuat...",
     /* Label & tooltip toolbar */
     menu:            "Menu",
+    hideSidebar:     "Sembunyikan sidebar",
+    showSidebar:     "Tampilkan sidebar",
     bold:            "Tebal",
     italic:          "Miring",
     heading:         "Judul bagian",
@@ -167,6 +169,8 @@ const I18N = {
     loading:         "Loading...",
     /* Toolbar labels & tooltips */
     menu:            "Menu",
+    hideSidebar:     "Hide sidebar",
+    showSidebar:     "Show sidebar",
     bold:            "Bold",
     italic:          "Italic",
     heading:         "Section heading",

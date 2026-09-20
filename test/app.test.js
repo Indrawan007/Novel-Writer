@@ -217,8 +217,15 @@ test('tab lain menulis -> data diadopsi tanpa ping-pong, ketikan lokal aman', as
   assert.equal(ed.value, 'ketikan lokal yang belum tersimpan', 'ketikan pengguna tidak dibuang');
 });
 
-test('Esc: tutup modal dulu, baru sidebar, baru preview', async () => {
+test('Esc: tutup modal dulu, baru sidebar (off-canvas), baru preview', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
+  // perilaku off-canvas berlaku di layar sempit
+  w.matchMedia = () => ({
+    matches: true,
+    addEventListener() {}, removeEventListener() {},
+    addListener() {}, removeListener() {}
+  });
+
   click(w, $('#btn-settings'));
   assert.equal($('#modal-settings').hidden, false);
   key(w, w.document, { key: 'Escape' });
@@ -229,6 +236,15 @@ test('Esc: tutup modal dulu, baru sidebar, baru preview', async () => {
   assert.equal($('#sidebar').classList.contains('open'), true);
   key(w, w.document, { key: 'Escape' });
   assert.equal($('#sidebar').classList.contains('open'), false, 'Esc kedua menutup sidebar');
+});
+
+test('Esc di desktop: collapse sidebar tidak ikut-ikutan tertutup saat mengetik', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  ed.focus();
+  key(w, w.document, { key: 'Escape' });
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), false,
+    'Esc tanpa modal/sidebar terbuka tidak menyembunyikan sidebar desktop');
 });
 
 test('fokus terperangkap di dalam modal (Tab melingkar)', async () => {
@@ -287,4 +303,55 @@ test('drag & drop mouse memindahkan bab', async () => {
 
   const order = [...S.getProject('p1').chapters].sort((a, b) => a.order - b.order).map(c => c.id);
   assert.equal(order.join(','), 'c3,c1,c2');
+});
+
+test('sidebar desktop: collapse/expand, tersimpan, label & aria mengikuti', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), false);
+  assert.equal($('#btn-open-sidebar').getAttribute('aria-expanded'), 'true');
+  assert.equal($('#btn-open-sidebar').title, 'Sembunyikan sidebar');
+
+  click(w, $('#btn-open-sidebar'));
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), true);
+  assert.equal(S.getSettings().sidebarCollapsed, true, 'preferensi tersimpan');
+  assert.equal($('#btn-open-sidebar').title, 'Tampilkan sidebar');
+  assert.equal($('#btn-open-sidebar').getAttribute('aria-expanded'), 'false');
+
+  click(w, $('#btn-open-sidebar'));
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), false);
+  assert.equal(S.getSettings().sidebarCollapsed, false);
+
+  // tombol X di header sidebar juga menutup di desktop
+  click(w, $('#btn-close-sidebar'));
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), true);
+});
+
+test('preferensi sidebar collapse diterapkan saat boot', async () => {
+  const seed = seedProject();
+  seed.settings.sidebarCollapsed = true;
+  const { $ } = await createApp({ seed });
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), true);
+  assert.equal($('#btn-open-sidebar').title, 'Tampilkan sidebar');
+});
+
+test('sidebar layar sempit tetap off-canvas (overlay + Esc)', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  w.matchMedia = () => ({
+    matches: true,
+    addEventListener() {}, removeEventListener() {},
+    addListener() {}, removeListener() {}
+  });
+  click(w, $('#btn-open-sidebar'));
+  assert.equal($('#sidebar').classList.contains('open'), true);
+  assert.equal($('#sidebar-overlay').hidden, false);
+  assert.equal($('#app').classList.contains('sidebar-collapsed'), false,
+    'status collapse tidak dipakai di layar sempit');
+
+  click(w, $('#sidebar-overlay'));
+  assert.equal($('#sidebar').classList.contains('open'), false);
+  assert.equal($('#sidebar-overlay').hidden, true);
+
+  click(w, $('#btn-open-sidebar'));
+  key(w, w.document, { key: 'Escape' });
+  assert.equal($('#sidebar').classList.contains('open'), false, 'Esc menutup off-canvas');
 });
