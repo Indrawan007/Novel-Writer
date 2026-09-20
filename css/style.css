@@ -72,14 +72,12 @@ html, body {
 *::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- LAYOUT UTAMA ---- */
-#app { display: grid; grid-template-columns: 264px 1fr; height: 100vh; }
-
-#sidebar {
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
-  display: flex; flex-direction: column;
-  z-index: 50; min-height: 0;
-}
+#app { display: flex; height: 100vh; }            /* flex agar lebar bisa dianimasikan */
+#sidebar { flex: 0 0 264px; width: 264px; overflow: hidden;
+           transition: flex-basis .22s ease, width .22s ease, transform .22s ease; }
+#app.sidebar-collapsed #sidebar { flex-basis: 0; width: 0; border-right-width: 0; }
+#app.sidebar-collapsed #sidebar > * { opacity: 0; }
+#main { flex: 1 1 auto; min-width: 0; }
 
 .sidebar-header {
   display: flex; justify-content: space-between; align-items: center;
@@ -553,35 +551,13 @@ kbd {
 }
 
 /* ---- RESPONSIF — sidebar off-canvas di layar sempit ---- */
-#btn-open-sidebar { display: none; }
+
 
 @media (max-width: 880px) {
-  #app { grid-template-columns: 1fr; }
-
-  #btn-open-sidebar { display: inline-flex; }
-
-  #sidebar {
-    position: fixed;
-    top: 0; bottom: 0; left: 0;
-    width: min(300px, 85vw);
-    transform: translateX(-103%);
-    transition: transform .22s ease;
-    box-shadow: 0 0 60px rgba(0, 0, 0, 0.35);
-  }
-  #sidebar.open { transform: translateX(0); }
-
-  #toolbar { padding: 0 8px; }
-  #toolbar-title { padding-left: 2px; }
-
-  #editor, #preview { padding: 26px 20px; }
-
-  .modal { margin: 0 14px; }
-
-  #sidebar-overlay {
-    position: fixed; inset: 0;
-    background: rgba(24, 18, 9, 0.45);
-    z-index: 40;
-  }
+  #app { display: block; }
+  #app.sidebar-collapsed #sidebar { width: min(300px,85vw); border-right-width: 1px; } /* collapse tak berlaku di mobile */
+  #app.sidebar-collapsed #sidebar > * { opacity: 1; }
+  #main { height: 100vh; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -28,7 +28,8 @@ const Storage = {
         lang: 'id',
         lastProject: null,
         lastChapter: null
-      }
+      },
+sidebarCollapsed: s.sidebarCollapsed === true              // validasi saat load/impor
     };
   },
 
