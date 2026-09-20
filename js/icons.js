@@ -29,7 +29,10 @@
     sun:      svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
     moon:     svg('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'),
     alert:    svg('<path d="M12 3l9.5 17H2.5z"/><path d="M12 9v5M12 17.2v.1"/>'),
-    feather:  svg('<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8L2 22"/><path d="M17.5 15H9"/>', 44)
+    feather:  svg('<path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8L2 22"/><path d="M17.5 15H9"/>', 44),
+    maximize: svg('<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>'),
+    minimize: svg('<path d="M4 14h6v6M20 10h-6V4M14 14h6v6M10 4H4v6"/>'),
+    bookOpen: svg('<path d="M12 6c2-1.2 3.5-1.5 6-1 1.2.2 2 1 2 3v11c0-1-.8-1.7-2-2-1.2-.3-2.5.2-4 1-1.2.6-2.4.6-4 0-1.5-.8-2.8-1.3-4-1-1.2.3-2 1-2 2V8c0-2 1-2.8 2-3 2.5-.5 4 0 6 1z"/><path d="M12 6v13"/>', 16)
   };
 
   function hydrateIcons(root) {

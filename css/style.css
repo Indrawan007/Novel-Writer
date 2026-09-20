@@ -601,6 +601,209 @@ kbd {
   #main { height: 100vh; height: 100dvh; }
 }
 
+/* ---- MODE FOKUS — menulis tanpa distraksi ---- */
+html.focus-mode #sidebar {
+  /* sembunyi tapi biarkan #sidebar-footer tetap bisa floating */
+  transform: translateX(-100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  width: 0 !important;
+  min-width: 0 !important;
+  border: none !important;
+  overflow: hidden;
+}
+html.focus-mode #sidebar-overlay { display: none !important; }
+html.focus-mode #sidebar-footer {
+  /* word-count floating di pojok */
+  visibility: visible !important;
+  opacity: 0.92;
+  pointer-events: auto;
+  position: fixed !important;
+  bottom: 16px;
+  right: 20px;
+  left: auto;
+  width: auto !important;
+  display: flex !important;
+  flex-direction: row;
+  gap: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 12px;
+  z-index: 30;
+  box-shadow: 0 4px 14px rgba(0,0,0,.06);
+}
+html.focus-mode #app { height: 100vh; height: 100dvh; }
+html.focus-mode #toolbar {
+  background: var(--bg);
+  border-bottom-color: var(--border);
+}
+html.focus-mode #toolbar #btn-open-sidebar,
+html.focus-mode #toolbar #btn-export,
+html.focus-mode #toolbar #btn-settings,
+html.focus-mode #toolbar .toolbar-divider:not(#fmt-divider),
+html.focus-mode #toolbar #btn-preview {
+  display: none !important;
+}
+html.focus-mode #toolbar #btn-focus {
+  display: inline-flex !important;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+html.focus-mode #editor-wrap {
+  background: var(--bg);
+  justify-content: center;
+}
+html.focus-mode #editor,
+html.focus-mode #preview {
+  max-width: 700px;
+  padding: 64px 40px 100px;
+}
+html.focus-mode #empty-state { display: none !important; }
+
+/* toolbar auto-hide di focus mode: sembunyi, muncul saat hover / is-peek / fokus */
+html.focus-mode #toolbar {
+  transition: opacity .22s, transform .22s;
+}
+@media (hover: hover) {
+  html.focus-mode #toolbar {
+    opacity: 0;
+    transform: translateY(-100%);
+    pointer-events: none;
+  }
+  html.focus-mode #toolbar:hover,
+  html.focus-mode #toolbar:focus-within,
+  html.focus-mode #toolbar.is-peek {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+@media (hover: none) {
+  html.focus-mode #toolbar { opacity: 0.96; }
+}
+
+/* ---- MODE BACA — kenyamanan membaca seperti buku ---- */
+html.reader-mode { overflow: hidden; }
+html.reader-mode #sidebar,
+html.reader-mode #sidebar-overlay {
+  display: none !important;
+}
+html.reader-mode #app { height: 100vh; height: 100dvh; }
+html.reader-mode #toolbar .fmt-btn,
+html.reader-mode #fmt-divider,
+html.reader-mode #btn-open-sidebar,
+html.reader-mode #btn-export,
+html.reader-mode #btn-preview,
+html.reader-mode #btn-settings,
+html.reader-mode #toolbar .toolbar-divider:not(#fmt-divider) {
+  display: none !important;
+}
+html.reader-mode #toolbar #btn-reader {
+  display: inline-flex !important;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+html.reader-mode #editor { display: none !important; }
+html.reader-mode #editor-wrap {
+  display: flex !important;
+  overflow-y: auto;
+  background: var(--bg);
+  justify-content: center;
+  flex: 1;
+}
+html.reader-mode #preview {
+  display: block !important;
+  max-width: 680px;
+  width: 100%;
+  height: auto;
+  min-height: 100%;
+  padding: 56px 40px 80px;
+  font-size: 19px;
+  line-height: 1.85;
+  overflow: visible;
+  background: transparent;
+}
+html.reader-mode #preview.prose {
+  font-family: var(--font-serif);
+}
+html.reader-mode #preview.prose h1 {
+  font-size: 1.9em;
+  text-align: center;
+  margin: 0 0 0.3em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5em;
+}
+html.reader-mode #preview.prose h1:first-child { margin-top: 0; }
+html.reader-mode #preview.prose h2 {
+  font-size: 1.35em;
+  margin-top: 2em;
+  color: var(--accent);
+}
+html.reader-mode #preview.prose p {
+  text-align: justify;
+  hyphens: auto;
+  margin: 0;
+  text-indent: 1.6em;
+}
+html.reader-mode #preview.prose p:first-of-type,
+html.reader-mode #preview.prose h1 + p,
+html.reader-mode #preview.prose h2 + p,
+html.reader-mode #preview.prose blockquote p { text-indent: 0; }
+html.reader-mode #preview.prose blockquote {
+  font-style: italic;
+  border-left-width: 3px;
+  margin: 1.5em 0;
+  padding: 0.8em 0 0.8em 1.2em;
+  background: var(--accent-soft);
+  border-radius: 0 4px 4px 0;
+}
+html.reader-mode #empty-state { display: none !important; }
+
+/* Tombol fokus/reader aktif — beri tekanan visual */
+#btn-focus[aria-pressed="true"],
+#btn-reader[aria-pressed="true"] {
+  background: var(--accent) !important;
+  color: var(--accent-contrast) !important;
+}
+#btn-focus[aria-pressed="true"]:hover,
+#btn-reader[aria-pressed="true"]:hover {
+  background: var(--accent-hover) !important;
+}
+
+/* Navigasi reader (opsional, muncul di bawah) */
+.reader-nav {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  box-shadow: var(--shadow);
+  z-index: 40;
+}
+.reader-nav .reader-progress {
+  font-size: 12px;
+  color: var(--text-dim);
+  align-self: center;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+html:not(.reader-mode) .reader-nav { display: none !important; }
+
+@media (max-width: 640px) {
+  html.focus-mode #editor,
+  html.focus-mode #preview { padding: 32px 20px 60px; }
+  html.reader-mode #preview { padding: 36px 20px 80px; font-size: 17.5px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

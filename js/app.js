@@ -13,6 +13,8 @@
   let activeProjectId = Storage.getSettings().lastProject;
   let activeChapterId = Storage.getSettings().lastChapter;
   let isPreview = false;
+  let isFocusMode = false;
+  let isReaderMode = false;
   let saveTimer = null;
   let confirmCallback = null;
   let renameTarget = null;
@@ -48,6 +50,8 @@
     fmtDivider:    $('#fmt-divider'),
     btnExport:     $('#btn-export'),
     btnPreview:    $('#btn-preview'),
+    btnFocus:      $('#btn-focus'),
+    btnReader:     $('#btn-reader'),
     btnTheme:      $('#btn-theme'),
   };
 
@@ -271,6 +275,10 @@
       if (dom.fmtDivider) dom.fmtDivider.hidden = true;
       if (dom.btnExport) dom.btnExport.hidden = true;
       if (dom.btnPreview) dom.btnPreview.hidden = true;
+      if (dom.btnFocus) dom.btnFocus.hidden = true;
+      if (dom.btnReader) dom.btnReader.hidden = true;
+      // keluar dari mode immersive jika tidak ada bab
+      if (isFocusMode || isReaderMode) { exitFocusMode(false); exitReaderMode(false); }
       return;
     }
 
@@ -280,7 +288,22 @@
     if (dom.fmtDivider) dom.fmtDivider.hidden = false;
     if (dom.btnExport) dom.btnExport.hidden = false;
     if (dom.btnPreview) dom.btnPreview.hidden = false;
+    if (dom.btnFocus) dom.btnFocus.hidden = false;
+    if (dom.btnReader) dom.btnReader.hidden = false;
     if (dom.toolbarTitle) dom.toolbarTitle.textContent = ch.title || t('chapter');
+
+    // MODE READER — tampilkan preview dengan gaya baca
+    if (isReaderMode) {
+      if (dom.editor) dom.editor.hidden = true;
+      if (dom.preview) dom.preview.hidden = false;
+      renderPreview(ch.content || '');
+      try { if (dom.preview) dom.preview.scrollTop = 0; } catch {}
+      updateFocusReaderButtons();
+      return;
+    }
+
+    // MODE FOKUS — paksa tampil editor (bukan preview) meski isPreview true
+    if (isFocusMode && isPreview) isPreview = false;
 
     if (!isPreview) {
       if (dom.editor) dom.editor.hidden = false;
@@ -299,6 +322,7 @@
       if (dom.preview) dom.preview.hidden = false;
       renderPreview(ch.content || '');
     }
+    updateFocusReaderButtons();
   }
 
   function renderPreview(md) {
@@ -342,6 +366,7 @@
       set(dom.btnTheme, dark ? t('themeToLight') : t('themeToDark'));
     }
     applySidebarLabels();
+    updateFocusReaderButtons();
   }
 
   // ============ PROJECT CRUD ============
@@ -850,11 +875,94 @@
 
   function togglePreview() {
     if (!activeChapterId) return;
+    // keluar dari reader/fokus dulu jika sedang aktif
+    if (isReaderMode) { exitReaderMode(); return; }
+    if (isFocusMode) { /* di fokus, preview dialihkan jadi reader? biarkan toggle biasa */ }
     saveCurrentChapter({ silent: true });
     isPreview = !isPreview;
     renderEditor();
     if (dom.btnPreview) dom.btnPreview.setAttribute('aria-pressed', String(isPreview));
   }
+
+  // ============ MODE FOKUS & MODE BACA ============
+  function updateFocusReaderButtons() {
+    if (dom.btnFocus) {
+      dom.btnFocus.setAttribute('aria-pressed', String(isFocusMode));
+      const label = isFocusMode ? t('exitFocusMode') : t('focusMode');
+      dom.btnFocus.title = label + ' (' + t('shortcutFocus') + ')';
+      dom.btnFocus.setAttribute('aria-label', label);
+      dom.btnFocus.innerHTML = isFocusMode ? Icons.minimize : Icons.maximize;
+    }
+    if (dom.btnReader) {
+      dom.btnReader.setAttribute('aria-pressed', String(isReaderMode));
+      const label = isReaderMode ? t('exitReaderMode') : t('readerMode');
+      dom.btnReader.title = label + ' (' + t('shortcutReader') + ')';
+      dom.btnReader.setAttribute('aria-label', label);
+      dom.btnReader.innerHTML = Icons.bookOpen;
+    }
+    if (dom.btnPreview) {
+      dom.btnPreview.setAttribute('aria-pressed', String(isPreview && !isReaderMode && !isFocusMode));
+      dom.btnPreview.title = t('preview') + ' (Ctrl+E)';
+      dom.btnPreview.setAttribute('aria-label', t('preview'));
+    }
+  }
+
+  function enterFocusMode() {
+    if (!activeChapterId) { toast(t('selectChapter')); return; }
+    if (isReaderMode) exitReaderMode(false);
+    saveCurrentChapter({ silent: true });
+    isFocusMode = true;
+    isPreview = false;
+    document.documentElement.classList.add('focus-mode');
+    closeSidebar();
+    renderEditor();
+    updateFocusReaderButtons();
+    toast(t('focusToast'), 3000);
+    setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 80);
+  }
+  function exitFocusMode(showToast = true) {
+    if (!isFocusMode) return;
+    isFocusMode = false;
+    document.documentElement.classList.remove('focus-mode');
+    document.querySelector('#toolbar')?.classList.remove('is-peek');
+    renderEditor();
+    updateFocusReaderButtons();
+    if (showToast) toast(t('exitFocusMode'), 2000);
+    setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 50);
+  }
+  function toggleFocusMode() {
+    if (isFocusMode) exitFocusMode();
+    else enterFocusMode();
+  }
+
+  function enterReaderMode() {
+    if (!activeChapterId) { toast(t('selectChapter')); return; }
+    if (isFocusMode) exitFocusMode(false);
+    saveCurrentChapter({ silent: true });
+    isReaderMode = true;
+    isPreview = false;
+    document.documentElement.classList.add('reader-mode');
+    closeSidebar();
+    const proj = Storage.getProject(activeProjectId);
+    const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+    if (ch) renderPreview(ch.content || '');
+    renderEditor();
+    updateFocusReaderButtons();
+    toast(t('readerToast'), 3000);
+  }
+  function exitReaderMode(showToast = true) {
+    if (!isReaderMode) return;
+    isReaderMode = false;
+    document.documentElement.classList.remove('reader-mode');
+    renderEditor();
+    updateFocusReaderButtons();
+    if (showToast) toast(t('exitReaderMode'), 2000);
+  }
+  function toggleReaderMode() {
+    if (isReaderMode) exitReaderMode();
+    else enterReaderMode();
+  }
+
   function sidebarOpen() {
     return !!(dom.sidebar && dom.sidebar.classList.contains('open'));
   }
@@ -981,6 +1089,8 @@
     activeProjectId = s.lastProject;
     activeChapterId = s.lastChapter;
     isPreview = false;
+    if (isFocusMode) { isFocusMode = false; document.documentElement.classList.remove('focus-mode'); document.querySelector('#toolbar')?.classList.remove('is-peek'); }
+    if (isReaderMode) { isReaderMode = false; document.documentElement.classList.remove('reader-mode'); }
     dirty = false;
     autoSaveDelay = s.autoSaveDelay || 1000;
     applyTheme(s.theme);
@@ -1147,6 +1257,8 @@
     $('#btn-italic')?.addEventListener('click', () => wrapSelection('*', '*'));
     $('#btn-heading')?.addEventListener('click', () => toggleLinePrefix('## '));
     dom.btnPreview?.addEventListener('click', togglePreview);
+    dom.btnFocus?.addEventListener('click', toggleFocusMode);
+    dom.btnReader?.addEventListener('click', toggleReaderMode);
     $('#btn-theme')?.addEventListener('click', toggleTheme);
 
     dom.btnExport?.addEventListener('click', () => openModal('modal-export'));
@@ -1252,13 +1364,18 @@
         else toast(Storage.lastError() === 'quota' ? t('storageFull') : t('storageSaveFail'), 8000, 'error');
         return;
       }
+      if (mod && e.shiftKey && key === 'f') { e.preventDefault(); toggleFocusMode(); return; }
+      if (mod && e.shiftKey && key === 'r') { e.preventDefault(); toggleReaderMode(); return; }
       if (mod && key === 'e') { e.preventDefault(); togglePreview(); return; }
       if (mod && key === 'b' && dom.editor && !dom.editor.hidden) { e.preventDefault(); wrapSelection('**', '**'); return; }
       if (mod && key === 'i' && dom.editor && !dom.editor.hidden) { e.preventDefault(); wrapSelection('*', '*'); return; }
+      if (e.key === 'F9' && !mod) { e.preventDefault(); toggleFocusMode(); return; }
+      if (e.key === 'F10' && !mod) { e.preventDefault(); toggleReaderMode(); return; }
 
       if (e.key === 'Escape') {
-        // Modal dulu; kalau tidak ada modal, tutup sidebar
         if (modalOpen()) closeModal();
+        else if (isFocusMode) exitFocusMode();
+        else if (isReaderMode) exitReaderMode();
         else if (sidebarOpen()) closeSidebar();
         else if (isPreview) togglePreview();
       }
@@ -1277,6 +1394,21 @@
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') flushNow();
+    });
+
+    // ---- toolbar peek di focus-mode ----
+    let _peekTimer = null;
+    document.addEventListener('mousemove', (e) => {
+      if (!isFocusMode) return;
+      const tb = document.querySelector('#toolbar');
+      if (!tb) return;
+      if (e.clientY < 56) {
+        tb.classList.add('is-peek');
+        clearTimeout(_peekTimer);
+      } else if (!tb.matches(':hover') && !tb.contains(document.activeElement)) {
+        clearTimeout(_peekTimer);
+        _peekTimer = setTimeout(() => tb.classList.remove('is-peek'), 900);
+      }
     });
 
     // ---- Tab lain menulis data ----
