@@ -100,11 +100,11 @@
     if (!dom.projectList) return;
     const projects = Storage.getProjects();
     dom.projectList.innerHTML = projects.map(p => `
-      <li class="${p.id === activeProjectId ? 'active' : ''}" data-id="${p.id}">
-        <span class="item-title">📖 ${escHtml(p.title || t('untitled'))}</span>
+      <li class="${p.id === activeProjectId ? 'active' : ''}" data-id="${p.id}"><span class="item-icon" aria-hidden="true">${Icons.book}</span>
+        <span class="item-title">${escHtml(p.title || t('untitled'))}</span>
         <span class="item-actions">
-          <button class="rename-btn" data-rename-proj="${p.id}" title="Rename">✏️</button>
-          <button data-del-proj="${p.id}" title="${t('delete')}">🗑</button>
+          <button class="rename-btn" data-rename-proj="${p.id}" title="${t('rename')}" aria-label="${t('rename')}">${Icons.pencil}</button>
+          <button data-del-proj="${p.id}" title="${t('delete')}" aria-label="${t('delete')}">${Icons.trash}</button>
         </span>
       </li>
     `).join('');
@@ -126,10 +126,11 @@
         <li class="${ch.id === activeChapterId ? 'active' : ''}"
             data-id="${ch.id}"
             draggable="true">
-          <span class="item-title">📑 ${escHtml(ch.title || t('chapter'))}</span>
+          <span class="item-icon" aria-hidden="true">${Icons.file}</span>
+          <span class="item-title">${escHtml(ch.title || t('chapter'))}</span>
           <span class="item-actions">
-            <button class="rename-btn" data-rename-ch="${ch.id}" title="Rename">✏️</button>
-            <button data-del-ch="${ch.id}" title="${t('delete')}">🗑</button>
+            <button class="rename-btn" data-rename-ch="${ch.id}" title="${t('rename')}" aria-label="${t('rename')}">${Icons.pencil}</button>
+            <button data-del-ch="${ch.id}" title="${t('delete')}" aria-label="${t('delete')}">${Icons.trash}</button>
           </span>
         </li>
       `).join('');
@@ -502,9 +503,10 @@
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     const btn = $('#btn-theme');
-    if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    // Tampilkan ikon tujuan berikutnya (gelap → matahari, terang → bulan)
+    if (btn) btn.innerHTML = theme === 'dark' ? Icons.sun : Icons.moon;
     const meta = $('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'dark' ? '#121214' : '#f4f4f5';
+    if (meta) meta.content = theme === 'dark' ? '#17150f' : '#f4f1e8';
   }
 
   // ============ EXPORT ============

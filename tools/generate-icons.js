@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* ============================================
    Generate ikon PWA (PNG) tanpa dependensi
-   Desain: monogram "N" putih di latar indigo #4f46e5
+   Desain: monogram "N" krem di latar oxblood #8a3b2e
    Cara pakai: node tools/generate-icons.js
    ============================================ */
 
@@ -63,8 +63,8 @@ function encodePng(width, height, rgba) {
 
 // ---- Gambar ----
 
-const BG = [79, 70, 229]; // #4f46e5 (indigo, konsisten dengan manifest)
-const FG = [255, 255, 255];
+const BG = [138, 59, 46];   // #8a3b2e (oxblood, konsisten dengan tema UI)
+const FG = [244, 241, 232]; // #f4f1e8 (kertas hangat)
 
 // Monogram "N" 8x8 (bar kiri + diagonal + bar kanan)
 const N = [

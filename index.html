@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Novel Writer</title>
-  <meta name="description" content="Minimalist novel writing app — distraction-free">
-  <meta name="theme-color" content="#f4f4f5">
+  <meta name="description" content="Minimalist novel writing app — distraction-free"> 
+  <meta name="theme-color" content="#f4f1e8">
   <!-- Terapkan tema tersimpan SEBELUM paint (mencegah flash tema yang salah) -->
   <script>
     (function () {
@@ -14,15 +14,14 @@
         var theme = (d && d.settings && d.settings.theme) || 'light';
         document.documentElement.dataset.theme = theme;
         var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.content = theme === 'dark' ? '#121214' : '#f4f4f5';
+        if (m) m.content = theme === 'dark' ? '#17150f' : '#f4f1e8';
       } catch (e) {}
     })();
   </script>
-  <!-- Fixed Deprecated Warning -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✍️</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%238a3b2e'/><text x='32' y='45' font-family='Georgia,serif' font-size='36' text-anchor='middle' fill='%23f4f1e8'>N</text></svg>">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
@@ -34,15 +33,19 @@
     <!-- ====== SIDEBAR ====== -->
     <aside id="sidebar">
       <div class="sidebar-header">
-        <h1 class="logo">✍️ <span data-i18n="appTitle">Novel Writer</span></h1>
-        <button id="btn-close-sidebar" class="icon-btn" aria-label="Close">✕</button>
+        <h1 class="logo" data-i18n="appTitle">Novel Writer</h1>
+        <button id="btn-close-sidebar" class="icon-btn" aria-label="Close" title="Close">
+          <span class="icon" data-icon="close" aria-hidden="true"></span>
+        </button>
       </div>
 
       <!-- Projects -->
       <div class="sidebar-section">
         <div class="section-header">
           <span data-i18n="projects">Proyek</span>
-          <button id="btn-new-project" class="icon-btn small" title="New Project">＋</button>
+          <button id="btn-new-project" class="icon-btn small" title="New Project" aria-label="New Project">
+            <span class="icon" data-icon="plus" aria-hidden="true"></span>
+          </button>
         </div>
         <ul id="project-list" class="item-list"></ul>
       </div>
@@ -67,7 +70,7 @@
           <strong id="stat-total">0</strong>
         </div>
         <div class="stat-row save-indicator" id="save-indicator" hidden>
-          <span class="save-dot"></span>
+          <span class="save-dot" aria-hidden="true"></span>
           <span data-i18n="saving">Menyimpan...</span>
         </div>
       </div>
@@ -80,18 +83,28 @@
     <main id="main">
       <!-- Toolbar -->
       <header id="toolbar">
-        <button id="btn-open-sidebar" class="icon-btn" aria-label="Menu">☰</button>
+        <button id="btn-open-sidebar" class="icon-btn" aria-label="Menu" title="Menu">
+          <span class="icon" data-icon="menu" aria-hidden="true"></span>
+        </button>
         <span id="toolbar-title" data-i18n="selectChapter">Pilih bab untuk mulai menulis</span>
         <div class="toolbar-right">
-          <button id="btn-bold" class="icon-btn fmt-btn" title="Bold (Ctrl+B)" hidden><b>B</b></button>
-          <button id="btn-italic" class="icon-btn fmt-btn" title="Italic (Ctrl+I)" hidden><i>I</i></button>
-          <button id="btn-heading" class="icon-btn fmt-btn" title="Heading" hidden>H</button>
+          <button id="btn-bold" class="icon-btn fmt-btn" title="Bold (Ctrl+B)" aria-label="Bold" hidden><b>B</b></button>
+          <button id="btn-italic" class="icon-btn fmt-btn" title="Italic (Ctrl+I)" aria-label="Italic" hidden><i>I</i></button>
+          <button id="btn-heading" class="icon-btn fmt-btn" title="Heading" aria-label="Heading" hidden>H</button>
           <span class="toolbar-divider" id="fmt-divider" hidden></span>
-          <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)" hidden>👁️</button>
-          <button id="btn-export" class="icon-btn" title="Export" hidden>📤</button>
+          <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)" aria-label="Preview" hidden>
+            <span class="icon" data-icon="eye" aria-hidden="true"></span>
+          </button>
+          <button id="btn-export" class="icon-btn" title="Export" aria-label="Export" hidden>
+            <span class="icon" data-icon="download" aria-hidden="true"></span>
+          </button>
           <span class="toolbar-divider"></span>
-          <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
-          <button id="btn-theme" class="icon-btn" title="Toggle Theme">🌙</button>
+          <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
+            <span class="icon" data-icon="sliders" aria-hidden="true"></span>
+          </button>
+          <button id="btn-theme" class="icon-btn" title="Toggle Theme" aria-label="Toggle Theme">
+            <span class="icon" data-icon="moon" aria-hidden="true"></span>
+          </button>
         </div>
       </header>
 
@@ -183,21 +196,21 @@
       </div>
       <div class="export-formats">
         <button class="btn-export-opt" data-format="md">
-          <span class="ext-icon">📄</span>
+          <span class="ext-badge">MD</span>
           <div class="ext-text">
             <strong>Markdown</strong>
             <span>(.md)</span>
           </div>
         </button>
         <button class="btn-export-opt" data-format="pdf">
-          <span class="ext-icon">📕</span>
+          <span class="ext-badge">PDF</span>
           <div class="ext-text">
             <strong>PDF</strong>
             <span>(.pdf)</span>
           </div>
         </button>
         <button class="btn-export-opt" data-format="docx">
-          <span class="ext-icon">📘</span>
+          <span class="ext-badge">DOCX</span>
           <div class="ext-text">
             <strong>Word</strong>
             <span>(.docx)</span>
@@ -212,12 +225,12 @@
     <!-- Settings -->
     <div id="modal-settings" class="modal modal-lg" hidden>
       <h2 data-i18n="settings">Pengaturan</h2>
-      
+
       <div class="form-group">
         <label data-i18n="language">Bahasa</label>
         <select id="set-lang">
-          <option value="id">🇮🇩 Indonesia</option>
-          <option value="en">🇬🇧 English</option>
+          <option value="id">Indonesia</option>
+          <option value="en">English</option>
         </select>
       </div>
 
@@ -237,10 +250,16 @@
       </div>
 
       <div class="form-group">
-        <label data-i18n="backupRestore">Cadangan & Pulihkan</label>
+        <label data-i18n="backupRestore">Cadangan &amp; Pulihkan</label>
         <div class="backup-btns">
-          <button class="btn-ghost" id="btn-backup" data-i18n="backupData">💾 Cadangkan</button>
-          <button class="btn-ghost" id="btn-restore" data-i18n="restoreData">📂 Pulihkan</button>
+          <button class="btn-ghost" id="btn-backup">
+            <span class="icon" data-icon="download" aria-hidden="true"></span>
+            <span data-i18n="backupData">Cadangkan</span>
+          </button>
+          <button class="btn-ghost" id="btn-restore">
+            <span class="icon" data-icon="upload" aria-hidden="true"></span>
+            <span data-i18n="restoreData">Pulihkan</span>
+          </button>
           <input type="file" id="inp-restore" accept=".json" hidden>
         </div>
       </div>
@@ -277,6 +296,7 @@
 
   <script src="js/i18n.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/markdown.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
