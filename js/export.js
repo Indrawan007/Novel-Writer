@@ -271,12 +271,6 @@ const Exporter = {
     return runs.length ? runs : [new TextRun({ text, font: 'Georgia' })];
   },
 
-  escapeHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  },
-
   sanitize(name) {
     // Ganti karakter ilegal di nama file dengan "_" (bukan hapus,
     // supaya judul tetap terbaca di nama file hasil ekspor)

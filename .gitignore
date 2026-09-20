@@ -1,0 +1,7 @@
+# Hasil generate (node tools/generate-icons.js) — jalankan generator sebelum deploy
+/icons/
+# Sistem & lingkungan
+.DS_Store
+Thumbs.db
+node_modules/
+*.log

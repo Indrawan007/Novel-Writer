@@ -26,8 +26,11 @@ const Storage = {
       if (!raw) return this._default();
       const data = JSON.parse(raw);
       return {
-        projects: data.projects || [],
-        settings: { ...this._default().settings, ...data.settings }
+        projects: Array.isArray(data.projects) ? data.projects : [],
+        settings: {
+          ...this._default().settings,
+          ...(data.settings && typeof data.settings === 'object' ? data.settings : {})
+        }
       };
     } catch {
       return this._default();
@@ -100,9 +103,64 @@ const Storage = {
     return JSON.stringify(this.load(), null, 2);
   },
 
+  /* ---- Normalisasi (untuk data tidak tepercaya, mis. file restore) ---- */
+
+  _normalizeChapter(c) {
+    if (!c || typeof c !== 'object') return null;
+    const now = new Date().toISOString();
+    const order = Number(c.order);
+    return {
+      id: (typeof c.id === 'string' && c.id) ? c.id : this.uid(),
+      title: typeof c.title === 'string' ? c.title : '',
+      content: typeof c.content === 'string' ? c.content : '',
+      order: Number.isFinite(order) ? order : 0,
+      createdAt: typeof c.createdAt === 'string' ? c.createdAt : now,
+      updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : now
+    };
+  },
+
+  _normalizeProject(p) {
+    if (!p || typeof p !== 'object') return null;
+    const now = new Date().toISOString();
+    return {
+      id: (typeof p.id === 'string' && p.id) ? p.id : this.uid(),
+      title: typeof p.title === 'string' ? p.title : '',
+      author: typeof p.author === 'string' ? p.author : '',
+      description: typeof p.description === 'string' ? p.description : '',
+      chapters: Array.isArray(p.chapters)
+        ? p.chapters.map(c => this._normalizeChapter(c)).filter(Boolean)
+        : [],
+      createdAt: typeof p.createdAt === 'string' ? p.createdAt : now,
+      updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : now
+    };
+  },
+
+  _settingsFrom(raw) {
+    const s = raw && typeof raw === 'object' ? raw : {};
+    const d = this._default().settings;
+    const clamp = (v, def, min, max) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+    };
+    return {
+      theme: s.theme === 'dark' ? 'dark' : 'light',
+      fontSize: clamp(s.fontSize, d.fontSize, 14, 28),
+      lineHeight: clamp(s.lineHeight, d.lineHeight, 1.4, 2.2),
+      autoSaveDelay: clamp(s.autoSaveDelay, d.autoSaveDelay, 500, 5000),
+      lang: s.lang === 'en' ? 'en' : 'id',
+      lastProject: typeof s.lastProject === 'string' ? s.lastProject : null,
+      lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null
+    };
+  },
+
   importAll(jsonStr) {
-    const data = JSON.parse(jsonStr);
-    if (!data.projects || !data.settings) throw new Error('Invalid');
-    this.save(data);
+    const data = JSON.parse(jsonStr); // biarkan throw → ditangkap pemanggil
+    if (!data || typeof data !== 'object' || !Array.isArray(data.projects)) {
+      throw new Error('Invalid');
+    }
+    this.save({
+      projects: data.projects.map(p => this._normalizeProject(p)).filter(Boolean),
+      settings: this._settingsFrom(data.settings)
+    });
   }
 };
