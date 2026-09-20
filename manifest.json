@@ -1,19 +1,21 @@
 {
   "name": "Novel Writer",
   "short_name": "NovelWriter",
-  "description": "Minimalist novel writing app",
+  "description": "Aplikasi menulis novel yang minimalis — distraction-free, offline-first",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f4f1e8",
   "theme_color": "#f4f1e8",
   "categories": ["productivity", "utilities"],
   "lang": "id",
+  "dir": "ltr",
   "icons": [
     {
-      "src": "icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
@@ -27,12 +29,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%238a3b2e'/><text x='32' y='45' font-family='Georgia,serif' font-size='36' text-anchor='middle' fill='%23f4f1e8'>N</text></svg>",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ]
 }

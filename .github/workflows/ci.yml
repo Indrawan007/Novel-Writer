@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Unit & konsistensi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Pasang dependensi pengujian
+        run: npm ci
+
+      - name: Generate ikon PWA
+        run: npm run icons
+
+      - name: Jalankan test suite
+        run: npm test

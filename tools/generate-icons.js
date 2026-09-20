@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 /* ============================================
-   Generate ikon PWA (PNG) tanpa dependensi
+   Generate ikon PWA (PNG + SVG) tanpa dependensi
    Desain: monogram "N" krem di latar oxblood #8a3b2e
-   Cara pakai: node tools/generate-icons.js
+   Keluaran: icons/*.png (di-gitignore) + icon.svg (di-commit)
+   Cara pakai: node tools/generate-icons.js  (atau: npm run icons)
    ============================================ */
 
 'use strict';
 
-const zlib = require('zlib');
-const fs = require('fs');
-const path = require('path');
+import zlib from 'node:zlib';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 
 // ---- PNG encoder (minimal, 8-bit RGBA) ----
 
@@ -139,6 +144,42 @@ function renderIcon(size) {
   return encodePng(size, size, out);
 }
 
+/* ---- Versi SVG (di-commit: dipakai manifest & favicon) ---- */
+
+function renderSvg(size) {
+  const boxW = size * 0.46;
+  const boxH = size * 0.56;
+  const cellW = boxW / 8;
+  const cellH = boxH / 8;
+  const x0 = (size - boxW) / 2;
+  const y0 = (size - boxH) / 2;
+  const hex = (c) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+  const r2 = (n) => Math.round(n * 100) / 100;
+
+  // Gabungkan sel yang bersebelahan secara horizontal jadi satu <rect>
+  const rects = [];
+  for (let gy = 0; gy < 8; gy++) {
+    let gx = 0;
+    while (gx < 8) {
+      if (N[gy][gx] !== '1') { gx++; continue; }
+      let span = 1;
+      while (gx + span < 8 && N[gy][gx + span] === '1') span++;
+      rects.push(
+        `    <rect x="${r2(x0 + gx * cellW)}" y="${r2(y0 + gy * cellH)}" ` +
+        `width="${r2(span * cellW)}" height="${r2(cellH)}" fill="${hex(FG)}"/>`
+      );
+      gx += span;
+    }
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+  <title>Novel Writer</title>
+  <rect width="${size}" height="${size}" fill="${hex(BG)}"/>
+${rects.join('\n')}
+</svg>
+`;
+}
+
 const outDir = path.join(__dirname, '..', 'icons');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -151,6 +192,11 @@ const targets = [
 for (const [file, size] of targets) {
   const dest = path.join(outDir, file);
   fs.writeFileSync(dest, renderIcon(size));
-  console.log('✓', file, size + 'x' + size);
+  console.log('✓', 'icons/' + file, size + 'x' + size);
 }
+
+// SVG di root repo (di-commit) — favicon + ikon manifest
+const svgDest = path.join(__dirname, '..', 'icon.svg');
+fs.writeFileSync(svgDest, renderSvg(512));
+console.log('✓', 'icon.svg', '(vektor, di-commit)');
 console.log('Selesai.');
