@@ -90,6 +90,8 @@ const I18N = {
     themeToLight:    "Ganti ke tema terang",
     openProject:     "Buka proyek",
     reorderHint:     "Tahan & geser, atau Alt+Panah untuk mengurutkan",
+    showSidebar:     "Tampilkan sidebar",
+    hideSidebar:     "Sembunyikan sidebar",
   },
   en: {
     appTitle:        "Novel Writer",
@@ -176,6 +178,8 @@ const I18N = {
     themeToLight:    "Switch to light theme",
     openProject:     "Open project",
     reorderHint:     "Hold & drag, or Alt+Arrow to reorder",
+    showSidebar:     "Show sidebar",
+    hideSidebar:     "Hide sidebar",
   }
 };
 

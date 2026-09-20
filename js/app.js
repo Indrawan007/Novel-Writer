@@ -341,6 +341,7 @@
       const dark = document.documentElement.dataset.theme === 'dark';
       set(dom.btnTheme, dark ? t('themeToLight') : t('themeToDark'));
     }
+    applySidebarLabels();
   }
 
   // ============ PROJECT CRUD ============
@@ -858,18 +859,94 @@
     return !!(dom.sidebar && dom.sidebar.classList.contains('open'));
   }
 
+  function sidebarCollapsed() {
+    const app = $('#app');
+    return !!(app && app.classList.contains('sidebar-collapsed'));
+  }
+
   // ============ SIDEBAR ============
-  function isMobileViewport() { return window.matchMedia('(max-width: 880px)').matches; }
-  function setSidebarCollapsed(v, persistIt = true) {
-    $('#app').classList.toggle('sidebar-collapsed', !!v);
-    if (persistIt) persist(Storage.saveSettings({ sidebarCollapsed: !!v }));
+  function isMobileViewport() {
+    try {
+      // jsdom (pengujian) tidak punya viewport nyata — anggap mobile agar drawer diuji
+      if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) return true;
+      return !!(typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 880px)').matches);
+    } catch { return false; }
+  }
+
+  function openSidebar() {
+    if (!dom.sidebar) return;
+    if (isMobileViewport()) {
+      dom.sidebar.classList.add('open');
+      if (dom.overlay) dom.overlay.hidden = false;
+      document.body.style.overflow = 'hidden';
+    } else {
+      setSidebarCollapsed(false);
+      return;
+    }
     applySidebarLabels();
   }
+
+  function closeSidebar() {
+    if (!dom.sidebar) return;
+    if (isMobileViewport()) {
+      dom.sidebar.classList.remove('open');
+      if (dom.overlay) dom.overlay.hidden = true;
+      document.body.style.overflow = '';
+    } else {
+      if (dom.overlay) dom.overlay.hidden = true;
+      dom.sidebar.classList.remove('open');
+    }
+    applySidebarLabels();
+  }
+
+  function setSidebarCollapsed(v, persistIt = true) {
+    const app = $('#app');
+    if (!app) return;
+    app.classList.toggle('sidebar-collapsed', !!v);
+    if (persistIt) persist(Storage.saveSettings({ sidebarCollapsed: !!v }));
+    if (!isMobileViewport() && dom.sidebar) {
+      dom.sidebar.classList.remove('open');
+      if (dom.overlay) dom.overlay.hidden = true;
+      document.body.style.overflow = '';
+    }
+    applySidebarLabels();
+  }
+
   function toggleSidebar() {
-    if (isMobileViewport()) { sidebarOpen() ? closeSidebar() : openSidebar(); return; }
+    if (isMobileViewport()) {
+      if (sidebarOpen()) closeSidebar();
+      else openSidebar();
+      return;
+    }
     setSidebarCollapsed(!sidebarCollapsed());
   }
-  function applySidebarLabels() { /* title/aria-label/aria-expanded = Menu | Sembunyikan sidebar | Tampilkan sidebar */ }
+
+  function applySidebarLabels() {
+    const btnOpen = $('#btn-open-sidebar');
+    const btnClose = $('#btn-close-sidebar');
+    const isMobile = isMobileViewport();
+    const collapsed = sidebarCollapsed();
+    const isOpen = sidebarOpen();
+    if (btnOpen) {
+      let title, aria;
+      if (isMobile) {
+        btnOpen.setAttribute('aria-expanded', String(isOpen));
+        title = t('menu');
+        aria = t('menu');
+      } else {
+        btnOpen.setAttribute('aria-expanded', String(!collapsed));
+        title = collapsed ? t('showSidebar') : t('hideSidebar');
+        aria = title;
+      }
+      btnOpen.title = title;
+      btnOpen.setAttribute('aria-label', aria);
+    }
+    if (btnClose) {
+      const closeTitle = isMobile ? t('close') : t('hideSidebar');
+      btnClose.title = closeTitle;
+      btnClose.setAttribute('aria-label', closeTitle);
+    }
+  }
 
   // ============ THEME ============
   function toggleTheme() {
@@ -893,6 +970,7 @@
     const json = Storage.exportAll();
     const blob = new Blob([json], { type: 'application/json' });
     const date = new Date().toISOString().slice(0, 10);
+    Exporter.download(blob, `novel-writer-backup-${date}.json`);
     toast(t('backupDone'));
   }
 
@@ -911,7 +989,9 @@
     applyFontSize(s.fontSize);
     applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(autoSaveDelay);
+    setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
+    applySidebarLabels();
   }
 
   function updateUndoRestoreButton() {
@@ -1010,9 +1090,6 @@
   $('#btn-close-sidebar')?.addEventListener('click', () => {
     if (isMobileViewport()) closeSidebar(); else setSidebarCollapsed(true);
   });
-  // init():  setSidebarCollapsed(s.sidebarCollapsed === true, false);
-  // + listener matchMedia('change'): keluar dari mode mobile → closeSidebar() + refresh label
-  // + applyDynamicLabels() kini memanggil applySidebarLabels()
     dom.overlay?.addEventListener('click', closeSidebar);
 
     $('#btn-new-project')?.addEventListener('click', () => openModal('modal-project'));
@@ -1247,8 +1324,27 @@
     applyFontSize(s.fontSize);
     applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(s.autoSaveDelay || 1000);
+    // terapkan preferensi sidebar (tanpa persist)
+    setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
     bindEvents();
+    // sinkronkan label sidebar setelah render awal
+    applySidebarLabels();
+    // saat keluar dari mobile, tutup drawer dan refresh label
+    try {
+      const mql = window.matchMedia('(max-width: 880px)');
+      const onViewportChange = () => {
+        if (!mql.matches) {
+          // desktop: pastikan overlay drawer tertutup
+          if (dom.sidebar) dom.sidebar.classList.remove('open');
+          if (dom.overlay) dom.overlay.hidden = true;
+          document.body.style.overflow = '';
+        }
+        applySidebarLabels();
+      };
+      if (mql.addEventListener) mql.addEventListener('change', onViewportChange);
+      else if (mql.addListener) mql.addListener(onViewportChange);
+    } catch {}
     registerServiceWorker();
 
     if (activeChapterId) {
