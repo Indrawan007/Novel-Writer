@@ -27,9 +27,9 @@ const Storage = {
         autoSaveDelay: 1000,
         lang: 'id',
         lastProject: null,
-        lastChapter: null
-      },
-sidebarCollapsed: s.sidebarCollapsed === true              // validasi saat load/impor
+        lastChapter: null,
+        sidebarCollapsed: false
+      }
     };
   },
 
@@ -153,7 +153,8 @@ sidebarCollapsed: s.sidebarCollapsed === true              // validasi saat load
       autoSaveDelay: clamp(s.autoSaveDelay, d.autoSaveDelay, 500, 5000),
       lang: s.lang === 'en' ? 'en' : 'id',
       lastProject: typeof s.lastProject === 'string' ? s.lastProject : null,
-      lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null
+      lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null,
+      sidebarCollapsed: s.sidebarCollapsed === true
     };
   },
 
