@@ -109,16 +109,33 @@ const I18N = {
   }
 };
 
-let currentLang = localStorage.getItem('nw-lang') || 'id';
+/* Bahasa disimpan HANYA di settings.lang (dalam 'novel-writer-data')
+   — satu sumber kebenaran, konsisten dengan theme & pengaturan lain.
+   Key lama 'nw-lang' dibersihkan (migrasi). */
+
+function readStoredLang() {
+  try {
+    localStorage.removeItem('nw-lang'); // migrasi: key lama tidak dipakai lagi
+    const d = JSON.parse(localStorage.getItem('novel-writer-data') || 'null');
+    const lang = d && d.settings && d.settings.lang;
+    return (lang === 'en' || lang === 'id') ? lang : 'id';
+  } catch (e) {
+    return 'id';
+  }
+}
+
+let currentLang = readStoredLang();
 
 function t(key) {
   return (I18N[currentLang] && I18N[currentLang][key]) || key;
 }
 
+/* Hanya mengubah terjemahan yang tampil di layar.
+   Persistensi dilakukan pemanggil via Storage.saveSettings({ lang }),
+   agar bahasa tetap satu sumber kebenaran dengan pengaturan lain. */
 function applyLanguage(lang) {
-  currentLang = lang;
-  localStorage.setItem('nw-lang', lang);
-  document.documentElement.lang = lang;
+  if (lang === 'en' || lang === 'id') currentLang = lang;
+  document.documentElement.lang = currentLang;
 
   document.querySelectorAll('[data-i18n]').forEach(el => {
     el.textContent = t(el.dataset.i18n);

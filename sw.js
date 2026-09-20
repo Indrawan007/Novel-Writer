@@ -2,7 +2,7 @@
    Service Worker — Offline Caching
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v3';
+const CACHE_NAME = 'novel-writer-v4';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.
@@ -13,6 +13,7 @@ const ASSETS = [
   'css/style.css',
   'js/i18n.js',
   'js/storage.js',
+  'js/markdown.js',
   'js/export.js',
   'js/app.js',
   'manifest.json',
@@ -20,12 +21,14 @@ const ASSETS = [
   'icons/icon-512.png'
 ].map(p => BASE + p);
 
-// Install — cache core assets
+// Install — cache aset inti satu per satu:
+// aset yang gagal/404 (mis. ikon belum di-generate di clone baru)
+// TIDAK membuat seluruh Service Worker gagal terpasang.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(ASSETS.map((url) => cache.add(url)))
+    )
   );
   self.skipWaiting(); // Activate immediately
 });

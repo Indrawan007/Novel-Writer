@@ -13,6 +13,7 @@ Seluruh data tersimpan di `localStorage` browser.
 - 🗂️ **Cadangkan & pulihkan** data (file JSON)
 - 🌙 Tema gelap/terang, ukuran font & tinggi baris bisa diatur
 - 🇮🇩🇬🇧 Bilingual: **Indonesia / English**
+- 🛡️ **Aman**: HTML mentah dalam Markdown di-escape & tautan `javascript:` diblokir
 - 📡 **Offline-ready** via Service Worker
 
 ## Menjalankan

@@ -179,11 +179,7 @@
 
   function renderPreview(md) {
     if (!dom.preview) return;
-    if (typeof marked !== 'undefined') {
-      dom.preview.innerHTML = marked.parse(md);
-    } else {
-      dom.preview.innerHTML = escHtml(md).replace(/\n/g, '<br>');
-    }
+    Markdown.render(md, dom.preview); // escape HTML mentah + sanitasi link (js/markdown.js)
   }
 
   function updateStats() {
@@ -519,7 +515,7 @@
     const json = Storage.exportAll();
     const blob = new Blob([json], { type: 'application/json' });
     const date = new Date().toISOString().slice(0, 10);
-    downloadBlob(blob, `novel-writer-backup-${date}.json`);
+    Exporter.download(blob, `novel-writer-backup-${date}.json`);
     toast(t('backupDone'));
   }
 
