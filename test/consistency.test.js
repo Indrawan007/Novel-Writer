@@ -86,3 +86,33 @@ test('generator ikon menghasilkan keluaran yang konsisten dengan PNG', () => {
   assert.match(svg, /^<svg /);
   assert.ok(svg.includes('#8a3b2e') && svg.includes('#f4f1e8'), 'warna identitas konsisten');
 });
+
+test('semua key t() di skrip ada di KEDUA kamus bahasa (bukan hanya key HTML)', () => {
+  const dictId = i18n.slice(i18n.indexOf('id: {'), i18n.indexOf('en: {'));
+  const dictEn = i18n.slice(i18n.indexOf('en: {'));
+  const dictKeys = (d) => new Set([...d.matchAll(/^\s{4}(\w+):/gm)].map(m => m[1]));
+  const id = dictKeys(dictId), en = dictKeys(dictEn);
+
+  const used = new Set();
+  for (const f of ['js/app.js', 'js/export.js', 'js/storage.js', 'js/richtext.js', 'js/text.js']) {
+    for (const m of read(f).matchAll(/\bt\(\s*'([A-Za-z0-9_]+)'/g)) used.add(m[1]);
+  }
+  for (const m of html.matchAll(/data-i18n(?:-[a-z]+)?="([^"]+)"/g)) used.add(m[1]);
+
+  assert.deepEqual([...used].filter(k => !id.has(k)), [], 'key hilang di kamus Indonesia');
+  assert.deepEqual([...used].filter(k => !en.has(k)), [], 'key hilang di kamus Inggris');
+  assert.deepEqual([...id].filter(k => !en.has(k)), [], 'kamus ID punya key yang tak ada di EN');
+  assert.deepEqual([...en].filter(k => !id.has(k)), [], 'kamus EN punya key yang tak ada di ID');
+});
+
+test('HUD imersif + pengaturannya ada di markup dan tersembunyi secara bawaan', () => {
+  for (const id of ['immersive-hud', 'hud-prev', 'hud-info', 'hud-next', 'hud-font-down',
+    'hud-font-up', 'hud-theme', 'hud-switch', 'hud-exit', 'hud-progress-fill']) {
+    assert.match(html, new RegExp(`id="${id}"`), `HUD kehilangan #${id}`);
+  }
+  assert.match(html, /<div id="immersive-hud" hidden>/, 'HUD mati di luar mode imersif');
+  assert.match(html, /id="set-fullscreen"/, 'pengaturan layar penuh otomatis');
+  assert.match(html, /id="set-typewriter"/, 'pengaturan typewriter Mode Fokus');
+  // CSS: chrome disembunyikan lewat satu kelas bersama, bukan per-mode
+  assert.match(read('css/style.css'), /html\.immersive #sidebar,\s*html\.immersive #sidebar-overlay,\s*html\.immersive #toolbar/);
+});

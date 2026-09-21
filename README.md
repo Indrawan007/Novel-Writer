@@ -32,7 +32,7 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
   backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 60 kasus (Node + jsdom) + CI
+- **Test suite** 62 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -170,7 +170,7 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 60 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 62 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
@@ -181,8 +181,9 @@ sanitasi (script/handler tidak ikut hidup), keamanan restore, ekspor
 sinkronisasi antar-tab, **mode imersif** (chrome hilang, HUD & hitungan kata,
 permintaan/pelepasan layar penuh, layar penuh yang ditutup browser, pudar HUD +
 kursor menganggur, navigasi & progres Mode Baca, ukuran huruf dari HUD,
-pengaturan tersimpan), konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
-jaminan **tanpa parser sintaks** di seluruh produk.
+pengaturan tersimpan), konsistensi markup↔kamus↔ikon↔SW↔manifest (termasuk **semua key `t()` di skrip**,
+bukan hanya key HTML, dan kamus ID/EN yang selalu sinkron), serta jaminan
+**tanpa parser sintaks** di seluruh produk.
 
 ## Regenerasi Ikon
 
