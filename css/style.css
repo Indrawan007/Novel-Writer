@@ -548,6 +548,14 @@ html, body {
 /* ---- SETTINGS ---- */
 .backup-btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
+.check-list { display: flex; flex-direction: column; gap: 9px; }
+.check-label {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13.5px; color: var(--text);
+  cursor: pointer;
+}
+.check-label input { accent-color: var(--accent); width: 15px; height: 15px; flex: none; }
+
 .shortcuts-grid {
   display: grid; grid-template-columns: 1fr 1fr;
   gap: 10px;
@@ -623,115 +631,125 @@ kbd {
   #main { height: 100vh; height: 100dvh; }
 }
 
-/* ---- MODE FOKUS — menulis tanpa distraksi ---- */
-html.focus-mode #sidebar {
-  /* sembunyi tapi biarkan #sidebar-footer tetap bisa floating */
-  transform: translateX(-100%);
+/* ============================================================
+   MODE IMERSIF (Fokus & Baca) — layar penuh, nol gangguan.
+   Prinsip: semua chrome (sidebar, toolbar, panel format, HUD)
+   lenyap total; muncul sejenak hanya saat ada aktivitas / intipan.
+   ============================================================ */
+:root:fullscreen { background: var(--bg); }
+
+html.focus-mode body, html.reader-mode body { overflow: hidden; }
+html.focus-mode #app, html.reader-mode #app { height: 100vh; height: 100dvh; }
+html.focus-mode #main, html.reader-mode #main { height: 100%; }
+
+/* sidebar & overlay lenyap total (tak ada lagi footer mengambang) */
+html.focus-mode #sidebar,
+html.reader-mode #sidebar { display: none !important; }
+html.focus-mode #sidebar-overlay,
+html.reader-mode #sidebar-overlay { display: none !important; }
+html.focus-mode #empty-state,
+html.reader-mode #empty-state { display: none !important; }
+
+/* toolbar jadi overlay mengambang: sembunyi, muncul saat .is-peek / hover / fokus */
+html.focus-mode #toolbar,
+html.reader-mode #toolbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 65;
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
   opacity: 0;
-  visibility: hidden;
+  transform: translateY(-110%);
   pointer-events: none;
-  width: 0 !important;
-  min-width: 0 !important;
-  border: none !important;
-  overflow: hidden;
+  transition: opacity .22s ease, transform .22s ease;
 }
-html.focus-mode #sidebar-overlay { display: none !important; }
-html.focus-mode #sidebar-footer {
-  /* word-count floating di pojok */
-  visibility: visible !important;
-  opacity: 0.92;
+html.focus-mode #toolbar.is-peek,
+html.reader-mode #toolbar.is-peek,
+html.focus-mode #toolbar:hover,
+html.reader-mode #toolbar:hover,
+html.focus-mode #toolbar:focus-within,
+html.reader-mode #toolbar:focus-within {
+  opacity: 1;
+  transform: translateY(0);
   pointer-events: auto;
-  position: fixed !important;
-  bottom: 16px;
-  right: 20px;
-  left: auto;
-  width: auto !important;
-  display: flex !important;
-  flex-direction: row;
-  gap: 14px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 7px 14px;
-  font-size: 12px;
-  z-index: 30;
-  box-shadow: 0 4px 14px rgba(0,0,0,.06);
-}
-html.focus-mode #app { height: 100vh; height: 100dvh; }
-html.focus-mode #toolbar {
-  background: var(--bg);
-  border-bottom-color: var(--border);
 }
 html.focus-mode #toolbar #btn-open-sidebar,
 html.focus-mode #toolbar #btn-export,
 html.focus-mode #toolbar #btn-settings,
-html.focus-mode #toolbar .toolbar-divider {
-  display: none !important;
-}
-html.focus-mode #toolbar #btn-focus {
-  display: inline-flex !important;
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-html.focus-mode #editor-wrap {
-  background: var(--bg);
-  justify-content: center;
-}
-html.focus-mode #editor,
-html.focus-mode #reader-view {
-  max-width: 700px;
-  padding: 64px 40px 100px;
-}
-html.focus-mode #empty-state { display: none !important; }
-
-/* toolbar auto-hide di focus mode: sembunyi, muncul saat hover / is-peek / fokus */
-html.focus-mode #toolbar {
-  transition: opacity .22s, transform .22s;
-}
-@media (hover: hover) {
-  html.focus-mode #toolbar {
-    opacity: 0;
-    transform: translateY(-100%);
-    pointer-events: none;
-  }
-  html.focus-mode #toolbar:hover,
-  html.focus-mode #toolbar:focus-within,
-  html.focus-mode #toolbar.is-peek {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-}
-@media (hover: none) {
-  html.focus-mode #toolbar { opacity: 0.96; }
-}
-
-/* ---- MODE BACA — kenyamanan membaca seperti buku ---- */
-html.reader-mode { overflow: hidden; }
-html.reader-mode #sidebar,
-html.reader-mode #sidebar-overlay {
-  display: none !important;
-}
-html.reader-mode #app { height: 100vh; height: 100dvh; }
-html.reader-mode #btn-open-sidebar,
-html.reader-mode #btn-export,
-html.reader-mode #btn-settings,
+html.focus-mode #toolbar .toolbar-divider,
+html.reader-mode #toolbar #btn-open-sidebar,
+html.reader-mode #toolbar #btn-export,
+html.reader-mode #toolbar #btn-settings,
 html.reader-mode #toolbar .toolbar-divider {
   display: none !important;
 }
-html.reader-mode #toolbar #btn-reader {
-  display: inline-flex !important;
-  color: var(--accent);
-  background: var(--accent-soft);
+
+/* ---- MODE FOKUS — menulis tanpa distraksi ---- */
+html.focus-mode #editor-wrap {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+  justify-content: flex-start;
 }
+html.focus-mode #editor {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 10vh 32px 42vh;
+  font-size: calc(var(--editor-size, 18px) + 1px);
+  caret-color: var(--accent);
+}
+/* tanpa mesin ketik: ruang bawah secukupnya */
+html.focus-mode:not(.typewriter-on) #editor { padding-bottom: 18vh; }
+html.focus-mode #editor[data-empty="true"]::before {
+  top: 10vh; left: 32px; right: 32px;
+}
+
+/* panel format: pil mengambang, hanya muncul saat ada seleksi / intipan */
+html.focus-mode #format-bar {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  z-index: 64;
+  width: auto;
+  max-width: calc(100vw - 32px);
+  transform: translate(-50%, -10px);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 10px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+html.focus-mode #format-bar.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+/* fokus paragraf: sekitar redup, blok aktif penuh */
+html.focus-mode.parafocus-on #editor > * { transition: opacity .3s ease; }
+html.focus-mode.parafocus-on #editor.has-focus-current > :not(.focus-current) { opacity: 0.3; }
+
+/* scrollbar nyaris tak terlihat sampai di-hover */
+html.focus-mode #editor::-webkit-scrollbar-thumb,
+html.reader-mode #editor-wrap::-webkit-scrollbar-thumb { background: transparent; }
+html.focus-mode #editor:hover::-webkit-scrollbar-thumb,
+html.reader-mode #editor-wrap:hover::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ---- MODE BACA — halaman buku yang tenang ---- */
 html.reader-mode #format-bar,
 html.reader-mode #editor { display: none !important; }
 html.reader-mode #editor-wrap {
   display: flex !important;
+  flex-direction: column;
+  align-items: center;
   overflow-y: auto;
   background: var(--bg);
-  justify-content: center;
+  justify-content: flex-start;
   flex: 1;
+  min-height: 0;
 }
 html.reader-mode #reader-view {
   display: block !important;
@@ -739,8 +757,8 @@ html.reader-mode #reader-view {
   width: 100%;
   height: auto;
   min-height: 100%;
-  padding: 56px 40px 80px;
-  font-size: 19px;
+  padding: 9vh 40px 30vh;
+  font-size: var(--reader-size, 19px);
   line-height: 1.85;
   overflow: visible;
   background: transparent;
@@ -751,9 +769,10 @@ html.reader-mode #reader-view.prose {
 html.reader-mode #reader-view.prose h1 {
   font-size: 1.9em;
   text-align: center;
-  margin: 0 0 0.3em;
+  margin: 0 0 0.4em;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.5em;
+  text-indent: 0;
 }
 html.reader-mode #reader-view.prose h1:first-child { margin-top: 0; }
 html.reader-mode #reader-view.prose p {
@@ -765,7 +784,15 @@ html.reader-mode #reader-view.prose p {
 html.reader-mode #reader-view.prose p:first-of-type,
 html.reader-mode #reader-view.prose h1 + p { text-indent: 0; }
 html.reader-mode #reader-view.prose p.gap { margin-top: 1.6em; }
-html.reader-mode #empty-state { display: none !important; }
+/* huruf awal bab tampil besar seperti cetakan buku */
+html.reader-mode #reader-view.prose > p:first-of-type::first-letter {
+  font-size: 3em;
+  float: left;
+  line-height: 0.92;
+  padding-right: 0.1em;
+  font-weight: 600;
+  color: var(--accent);
+}
 
 /* Tombol fokus/reader aktif — beri tekanan visual */
 #btn-focus[aria-pressed="true"],
@@ -778,41 +805,131 @@ html.reader-mode #empty-state { display: none !important; }
   background: var(--accent-hover) !important;
 }
 
-/* Navigasi reader (opsional, muncul di bawah) */
-.reader-nav {
+/* ---- BILAH PROGRES BACA — garis tipis 3px di tepi atas ---- */
+#reader-progress {
   position: fixed;
-  bottom: 0;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 70;
+  background: transparent;
+  pointer-events: none;
+}
+#reader-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.12s linear;
+}
+html:not(.reader-mode) #reader-progress { display: none !important; }
+
+/* ---- HUD IMERSIF — pil mengambang, lenyap saat idle ---- */
+.immersive-hud {
+  position: fixed;
+  z-index: 66;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 10px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: 24px;
+  padding: 7px 10px;
   box-shadow: var(--shadow);
-  z-index: 40;
-}
-.reader-nav .reader-progress {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--text-dim);
-  align-self: center;
-  padding: 0 8px;
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  max-width: calc(100vw - 24px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
-html:not(.reader-mode) .reader-nav { display: none !important; }
+html:not(.focus-mode) #focus-hud,
+html:not(.reader-mode) #reader-hud { display: none !important; }
+.immersive-hud.is-hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(14px);
+  pointer-events: none;
+}
+.hud-meta {
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+.hud-dot {
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  flex: none;
+}
+.hud-sep {
+  width: 1px; height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+  flex: none;
+}
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.hud-btn:hover { background: var(--bg-hover); color: var(--text); }
+.hud-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
+.hud-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.hud-btn .icon { display: inline-flex; }
+.hud-btn .icon svg { display: block; }
+.hud-exit { border-color: var(--border); padding: 0 12px; }
+.hud-exit:hover { border-color: var(--border-strong); }
+.hud-text { font-family: var(--font-serif); font-size: 13px; min-width: 34px; }
+.hud-save { display: inline-flex; padding: 0 2px; }
+.hud-save .save-dot { animation-duration: 1.2s; }
+#focus-save.save-error .save-dot { background: var(--danger); animation: none; opacity: 1; }
+
+/* idle: kursor pun disembunyikan — benar-benar nol gangguan */
+html.focus-mode.immersive-idle,
+html.reader-mode.immersive-idle,
+html.focus-mode.immersive-idle *,
+html.reader-mode.immersive-idle * { cursor: none !important; }
+
+/* toast naik ke atas & mengecil agar tak menutupi tulisan */
+html.focus-mode #toast,
+html.reader-mode #toast {
+  top: 14px;
+  bottom: auto;
+  font-size: 12.5px;
+  padding: 7px 14px;
+}
 
 @media (max-width: 640px) {
-  html.focus-mode #editor,
-  html.focus-mode #reader-view { padding: 32px 20px 60px; }
-  html.focus-mode #editor { padding-top: 8px; }
-  html.focus-mode #format-bar { padding: 8px 16px 2px; }
-  html.reader-mode #reader-view { padding: 36px 20px 80px; font-size: 17.5px; }
+  html.focus-mode #editor { padding: 6vh 20px 40vh; }
+  html.focus-mode:not(.typewriter-on) #editor { padding-bottom: 18vh; }
+  html.focus-mode #editor[data-empty="true"]::before { left: 20px; right: 20px; top: 6vh; }
+  html.focus-mode #format-bar { top: 52px; }
+  html.reader-mode #reader-view { padding: 7vh 22px 30vh; }
+  .immersive-hud { gap: 5px; padding: 6px 8px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .hud-meta { font-size: 12px; }
+  .hud-hide-sm { display: none !important; }
+  #reader-pos { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
   #editor, #reader-view { padding: 28px 20px; }
   #editor { padding-top: 8px; }
   #editor[data-empty="true"]::before { left: 20px; right: 20px; top: 8px; }
   #format-bar { padding: 8px 16px 4px; }
+}
+
+@media (max-width: 480px) {
+  .hud-exit { padding: 0 7px; }
+  .hud-exit-label { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -837,6 +954,13 @@ html:not(.reader-mode) .reader-nav { display: none !important; }
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+px; height: 1px;
   padding: 0; margin: -1px;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);

@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
 
   // ============ STATE ============
   let activeProjectId = Storage.getSettings().lastProject;
@@ -20,6 +20,15 @@
   let autoSaveDelay = Storage.getSettings().autoSaveDelay || 1000;
   let lastFocused = null;   // elemen pemanggil modal (fokus dikembalikan saat tutup)
   let dirty = false;        // ada ketikan yang belum tersimpan
+  // ---- imersif ----
+  let typewriterOn = Storage.getSettings().typewriter !== false;
+  let paraFocusOn = Storage.getSettings().paraFocus !== false;
+  let readerFontSize = Storage.getSettings().readerFont || 19;
+  let focusStartWords = 0;  // kata bab saat Mode Fokus dimulai (basis sesi)
+  let immersiveFullscreen = false; // fullscreen diminta oleh mode imersif
+  let idleTimer = null;     // pewaktu sembunyi-otomatis chrome imersif
+  let peekTimer = null;     // pewaktu intipan toolbar
+  const hintShown = { focus: false, reader: false }; // petunjuk sekali per sesi
 
   // ============ DOM REFS ============
   const $ = (s, p) => (p || document).querySelector(s);
@@ -50,6 +59,25 @@
     btnFocus:      $('#btn-focus'),
     btnReader:     $('#btn-reader'),
     btnTheme:      $('#btn-theme'),
+    // ---- chrome imersif ----
+    focusHud:      $('#focus-hud'),
+    focusWords:    $('#focus-words'),
+    focusSession:  $('#focus-session'),
+    focusSave:     $('#focus-save'),
+    btnTypewriter: $('#btn-typewriter'),
+    btnParafocus:  $('#btn-parafocus'),
+    btnFocusFs:    $('#btn-focus-fullscreen'),
+    btnExitFocus:  $('#btn-exit-focus'),
+    readerHud:     $('#reader-hud'),
+    readerPos:     $('#reader-pos'),
+    readerProgress: $('#reader-progress'),
+    readerFill:    $('#reader-progress-fill'),
+    btnPrevCh:     $('#btn-prev-ch'),
+    btnNextCh:     $('#btn-next-ch'),
+    btnReaderDec:  $('#btn-reader-dec'),
+    btnReaderInc:  $('#btn-reader-inc'),
+    btnReaderFs:   $('#btn-reader-fullscreen'),
+    btnExitReader: $('#btn-exit-reader'),
   };
 
   // ============ HELPERS ============
@@ -82,6 +110,8 @@
   let toastTimer;
   function toast(msg, ms = 2000, type) {
     if (!dom.toast) return;
+    // Saat imersif, info biasa dipersingkat; error tetap menonjol
+    if ((isFocusMode || isReaderMode) && type !== 'error') ms = Math.min(ms, 1600);
     dom.toast.textContent = msg;
     dom.toast.classList.toggle('toast-error', type === 'error');
     dom.toast.hidden = false;
@@ -288,8 +318,9 @@
       if (dom.editor) dom.editor.hidden = true;if (dom.formatBar) dom.formatBar.hidden = true;
       if (dom.reader) dom.reader.hidden = false;
       renderReader(ch);
-      try { if (dom.reader) dom.reader.scrollTop = 0; } catch {}
+      try { if (dom.editorWrap) dom.editorWrap.scrollTop = 0; if (dom.reader) dom.reader.scrollTop = 0; } catch {}
       updateFocusReaderButtons();
+      updateReaderHud();
       return;
     }
 
@@ -308,6 +339,7 @@
         // Kursor di akhir konten — posisi lama milik bab sebelumnya
         RichText.focusEnd(dom.editor);
       }
+      if (isFocusMode) updateFocusCurrent();
     }
     updateToolbar();
     updateFocusReaderButtons();
@@ -317,11 +349,14 @@
    * Isi tampilan Mode Baca: judul bab sebagai <h1>, lalu isi bab.
    * Isi 'html' dirender dari model blok tersanitasi (js/richtext.js);
    * isi 'text' lama = paragraf teks polos (js/text.js — textContent,
-   * jadi bebas injeksi HTML).
+   * jadi bebas injeksi HTML). Judul dipasang via textContent (aman).
    */
   function renderReader(ch) {
     if (!dom.reader) return;
     dom.reader.textContent = '';
+    const h1 = document.createElement('h1');
+    h1.textContent = ch.title || t('chapter');
+    dom.reader.appendChild(h1);
     if (ch.format === 'html') {
       const frag = RichText.buildNodes(dom.reader, RichText.blocks(ch.content || ''));
       dom.reader.appendChild(frag);
@@ -342,6 +377,7 @@
     if (dom.statChapter) dom.statChapter.textContent = nf(ch ? wordCount(ch.content || '', ch.format) : 0);
     const total = chapters.reduce((s, c) => s + wordCount(c.content || '', c.format), 0);
     if (dom.statTotal) dom.statTotal.textContent = nf(total);
+    updateFocusHud();
   }
 
   function renderAll() {
@@ -707,6 +743,7 @@
   function markDirty() {
     dirty = true;
     RichText.syncEmpty(dom.editor);
+    if (isFocusMode) { updateFocusHud(); updateFocusCurrent(); }
     autoSave();
   }
 
@@ -739,18 +776,32 @@
     return ok;
   }
 
+  /** Titik status simpan di HUD fokus (pengganti footer yang disembunyikan). */
+  function setFocusSave(visible, isError) {
+    if (!dom.focusSave) return;
+    dom.focusSave.hidden = !visible;
+    dom.focusSave.classList.toggle('save-error', !!isError);
+  }
+
   function showSaving() {
-    if (!dom.saveIndicator) return;
-    dom.saveIndicator.classList.remove('save-error');
-    dom.saveIndicator.hidden = false;
+    if (dom.saveIndicator) {
+      dom.saveIndicator.classList.remove('save-error');
+      dom.saveIndicator.hidden = false;
+    }
+    setFocusSave(true, false);
     clearTimeout(showSaving._t);
-    showSaving._t = setTimeout(() => { if (dom.saveIndicator) dom.saveIndicator.hidden = true; }, 1500);
+    showSaving._t = setTimeout(() => {
+      if (dom.saveIndicator) dom.saveIndicator.hidden = true;
+      setFocusSave(false, false);
+    }, 1500);
   }
 
   function showSaveError() {
-    if (!dom.saveIndicator) return;
-    dom.saveIndicator.classList.add('save-error');
-    dom.saveIndicator.hidden = false;
+    if (dom.saveIndicator) {
+      dom.saveIndicator.classList.add('save-error');
+      dom.saveIndicator.hidden = false;
+    }
+    setFocusSave(true, true);
     clearTimeout(showSaving._t);
   }
 
@@ -811,7 +862,284 @@
     if (RichText.indent(ed, e.shiftKey ? -1 : 1)) markDirty();
   }
 
-  // ============ MODE FOKUS & MODE BACA ============
+  // ============ MODE FOKUS & MODE BACA (imersif: fullscreen, nol gangguan) ============
+
+  /* ---- Fullscreen bawaan browser (kegagalan = mode tetap jalan tanpa fullscreen) ---- */
+
+  function fullscreenSupported() {
+    try {
+      const el = document.documentElement;
+      return typeof el.requestFullscreen === 'function' ||
+             typeof el.webkitRequestFullscreen === 'function';
+    } catch { return false; }
+  }
+
+  function isFullscreen() {
+    try { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+    catch { return false; }
+  }
+
+  function requestImmersiveFullscreen() {
+    if (!fullscreenSupported() || isFullscreen()) return;
+    try {
+      const el = document.documentElement;
+      const p = typeof el.requestFullscreen === 'function'
+        ? el.requestFullscreen({ navigationUI: 'hide' })
+        : el.webkitRequestFullscreen();
+      if (p && typeof p.then === 'function') {
+        p.then(
+          () => { immersiveFullscreen = isFullscreen(); updateFullscreenButtons(); },
+          () => { immersiveFullscreen = false; }
+        );
+      } else {
+        immersiveFullscreen = true;
+      }
+    } catch { immersiveFullscreen = false; }
+  }
+
+  function releaseImmersiveFullscreen() {
+    if (!immersiveFullscreen && !isFullscreen()) return;
+    immersiveFullscreen = false;
+    try {
+      if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+        const p = document.exitFullscreen();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } else if (document.webkitFullscreenElement && typeof document.webkitExitFullscreen === 'function') {
+        document.webkitExitFullscreen();
+      }
+    } catch {}
+    updateFullscreenButtons();
+  }
+
+  function immersiveActive() { return isFocusMode || isReaderMode; }
+
+  /* ---- Chrome imersif: tampil saat ada aktivitas, lenyap saat idle ---- */
+  const IDLE_MS = 2600;
+
+  function showHud(hud) {
+    if (!hud) return;
+    hud.hidden = false;
+    hud.classList.remove('is-hidden');
+  }
+
+  function hideHud(hud) {
+    if (!hud) return;
+    hud.classList.add('is-hidden');
+    hud.hidden = true;
+  }
+
+  function revealImmersiveChrome() {
+    document.documentElement.classList.remove('immersive-idle');
+    [dom.focusHud, dom.readerHud].forEach(h => {
+      if (h && !h.hidden) h.classList.remove('is-hidden');
+    });
+    updateFocusFormatBar();
+  }
+
+  function concealImmersiveChrome() {
+    if (!immersiveActive() || modalOpen()) return;
+    document.documentElement.classList.add('immersive-idle');
+    [dom.focusHud, dom.readerHud].forEach(h => { if (h) h.classList.add('is-hidden'); });
+    const tb = document.querySelector('#toolbar');
+    if (tb) tb.classList.remove('is-peek');
+    if (dom.formatBar) dom.formatBar.classList.remove('is-visible');
+  }
+
+  /** Setiap aktivitas pengguna me-reset pewaktu idle. */
+  function pokeImmersive() {
+    if (!immersiveActive()) return;
+    revealImmersiveChrome();
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(concealImmersiveChrome, IDLE_MS);
+  }
+
+  /** Toolbar muncul saat kursor/ketukan menyentuh tepi atas layar. */
+  function peekToolbarIfNeeded(clientY) {
+    if (!immersiveActive()) return;
+    const tb = document.querySelector('#toolbar');
+    if (!tb) return;
+    if (clientY < 64) {
+      tb.classList.add('is-peek');
+      clearTimeout(peekTimer);
+      updateFocusFormatBar();
+    } else if (!tb.contains(document.activeElement)) {
+      let hover = false;
+      try { hover = tb.matches(':hover'); } catch {}
+      if (!hover) {
+        clearTimeout(peekTimer);
+        peekTimer = setTimeout(() => {
+          tb.classList.remove('is-peek');
+          updateFocusFormatBar();
+        }, 900);
+      }
+    }
+  }
+
+  /* ---- Fokus paragraf + mesin ketik (Mode Fokus) ---- */
+
+  /** Blok (p/h2/blockquote) tempat kursor berada — null bila tak relevan. */
+  function currentFocusBlock() {
+    if (!isFocusMode || (!typewriterOn && !paraFocusOn)) return null;
+    try {
+      const sel = document.getSelection();
+      if (!sel || !sel.anchorNode || !dom.editor || !dom.editor.contains(sel.anchorNode)) return null;
+      const n = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+      const blk = n && n.closest ? n.closest('p, h1, h2, blockquote') : null;
+      return blk && dom.editor.contains(blk) ? blk : null;
+    } catch { return null; }
+  }
+
+  function clearFocusMarks() {
+    if (!dom.editor) return;
+    try {
+      dom.editor.querySelectorAll('.focus-current').forEach(el => el.classList.remove('focus-current'));
+    } catch {}
+    dom.editor.classList.remove('has-focus-current');
+  }
+
+  /** Tandai paragraf aktif (redupkan sekitarnya) + jaga di tengah layar. */
+  function updateFocusCurrent() {
+    const ed = dom.editor;
+    if (!ed) return;
+    if (!isFocusMode || (!typewriterOn && !paraFocusOn)) { clearFocusMarks(); return; }
+    const blk = currentFocusBlock();
+    if (!blk) { clearFocusMarks(); return; }
+    try {
+      ed.querySelectorAll('.focus-current').forEach(el => { if (el !== blk) el.classList.remove('focus-current'); });
+    } catch {}
+    blk.classList.add('focus-current');
+    ed.classList.add('has-focus-current');
+    if (typewriterOn) centerFocusBlock(ed, blk);
+  }
+
+  /** Gulir editor agar blok aktif duduk ~42% dari atas (seketika). */
+  function centerFocusBlock(ed, blk) {
+    try {
+      if (typeof ed.getBoundingClientRect !== 'function') return;
+      const edRect = ed.getBoundingClientRect();
+      const r = blk.getBoundingClientRect();
+      if (!edRect || !r || !(edRect.height > 0)) return;
+      const top = r.top - edRect.top + ed.scrollTop - edRect.height * 0.42 + r.height / 2;
+      const next = Math.max(0, top);
+      if (Math.abs(next - ed.scrollTop) > 4) ed.scrollTop = next;
+    } catch {}
+  }
+
+  /** Panel format di Mode Fokus: hanya muncul saat ada seleksi / toolbar diintip. */
+  function updateFocusFormatBar() {
+    const bar = dom.formatBar;
+    if (!bar) return;
+    if (!isFocusMode) { bar.classList.remove('is-visible'); return; }
+    const tb = document.querySelector('#toolbar');
+    const peek = !!(tb && (tb.classList.contains('is-peek') || tb.contains(document.activeElement)));
+    let hasSel = false;
+    try {
+      const sel = document.getSelection();
+      hasSel = !!(sel && !sel.isCollapsed && dom.editor && dom.editor.contains(sel.anchorNode));
+    } catch {}
+    bar.classList.toggle('is-visible', peek || hasSel);
+  }
+
+  /* ---- HUD kata (Mode Fokus) ---- */
+
+  /** Kata bab aktif termasuk ketikan yang belum tersimpan. */
+  function liveChapterWords() {
+    const proj = Storage.getProject(activeProjectId);
+    const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+    if (!ch) return 0;
+    if (dirty && dom.editor && !dom.editor.hidden) {
+      try { return RichText.wordCount(RichText.getHtml(dom.editor), 'html'); } catch {}
+    }
+    return wordCount(ch.content || '', ch.format);
+  }
+
+  function updateFocusHud() {
+    if (!dom.focusWords) return;
+    const cur = liveChapterWords();
+    dom.focusWords.textContent = nf(cur) + ' ' + t('words');
+    if (dom.focusSession) {
+      const sess = cur - focusStartWords;
+      dom.focusSession.textContent = (sess < 0 ? '-' : '+') + nf(Math.abs(sess)) + ' ' + t('sessionSuffix');
+    }
+  }
+
+  /* ---- HUD baca: progres, navigasi bab, ukuran huruf ---- */
+
+  function readerChapterList() {
+    return sortedChapters(Storage.getProject(activeProjectId));
+  }
+
+  function updateReaderHud() {
+    if (!isReaderMode) return;
+    const chs = readerChapterList();
+    const idx = Math.max(0, chs.findIndex(c => c.id === activeChapterId));
+    let pct = 1;
+    try {
+      const sc = dom.editorWrap;
+      if (sc) {
+        const max = sc.scrollHeight - sc.clientHeight;
+        pct = max > 0 ? Math.min(1, Math.max(0, sc.scrollTop / max)) : 1;
+      }
+    } catch {}
+    if (dom.readerFill) {
+      try { dom.readerFill.style.width = (pct * 100).toFixed(1) + '%'; } catch {}
+    }
+    const proj = Storage.getProject(activeProjectId);
+    const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+    const words = ch ? wordCount(ch.content || '', ch.format) : 0;
+    const left = Math.max(0, Math.round(words * (1 - pct)));
+    const mins = left <= 0 ? 0 : Math.max(1, Math.round(left / 200));
+    if (dom.readerPos) {
+      const tail = mins === 0 ? t('readingDone') : t('minLeft', { n: nf(mins) });
+      dom.readerPos.textContent =
+        t('chapterOf', { cur: nf(idx + 1), total: nf(Math.max(1, chs.length)) }) +
+        ' • ' + Math.round(pct * 100) + '% • ' + tail;
+    }
+    updateReaderNavState();
+  }
+
+  /** Status tombol bab sebelum/sesudah — aman dipanggil kapan pun. */
+  function updateReaderNavState() {
+    const chs = readerChapterList();
+    const idx = chs.findIndex(c => c.id === activeChapterId);
+    if (dom.btnPrevCh) {
+      dom.btnPrevCh.disabled = !(isReaderMode && idx > 0);
+      dom.btnPrevCh.title = t('prevChapter');
+      dom.btnPrevCh.setAttribute('aria-label', t('prevChapter'));
+    }
+    if (dom.btnNextCh) {
+      dom.btnNextCh.disabled = !(isReaderMode && idx >= 0 && idx < chs.length - 1);
+      dom.btnNextCh.title = t('nextChapter');
+      dom.btnNextCh.setAttribute('aria-label', t('nextChapter'));
+    }
+  }
+
+  function gotoReaderChapter(dir) {
+    if (!isReaderMode) return;
+    const chs = readerChapterList();
+    const idx = chs.findIndex(c => c.id === activeChapterId);
+    const nxt = chs[idx + dir];
+    if (!nxt) return;
+    activeChapterId = nxt.id;
+    dirty = false;
+    persist(Storage.saveSettings({ lastChapter: nxt.id }));
+    renderChapters();
+    renderEditor();
+    try { if (dom.editorWrap) dom.editorWrap.scrollTop = 0; } catch {}
+    updateReaderHud();
+    pokeImmersive();
+  }
+
+  function applyReaderFont(px) {
+    const n = Math.round(Number(px));
+    readerFontSize = Number.isFinite(n) ? Math.min(28, Math.max(14, n)) : 19;
+    try { document.documentElement.style.setProperty('--reader-size', readerFontSize + 'px'); } catch {}
+    const val = $('#readerfont-val');
+    if (val) val.textContent = readerFontSize + 'px';
+    const inp = $('#set-readerfont');
+    if (inp) inp.value = String(readerFontSize);
+  }
+
   function updateFocusReaderButtons() {
     if (dom.btnFocus) {
       dom.btnFocus.setAttribute('aria-pressed', String(isFocusMode));
@@ -827,28 +1155,71 @@
       dom.btnReader.setAttribute('aria-label', label);
       dom.btnReader.innerHTML = Icons.bookOpen;
     }
+    if (dom.btnTypewriter) {
+      dom.btnTypewriter.setAttribute('aria-pressed', String(typewriterOn));
+      dom.btnTypewriter.title = t('typewriterMode');
+      dom.btnTypewriter.setAttribute('aria-label', t('typewriterMode'));
+    }
+    if (dom.btnParafocus) {
+      dom.btnParafocus.setAttribute('aria-pressed', String(paraFocusOn));
+      dom.btnParafocus.title = t('paraFocus');
+      dom.btnParafocus.setAttribute('aria-label', t('paraFocus'));
+    }
+    updateFullscreenButtons();
+    updateReaderNavState();
+  }
+
+  function updateFullscreenButtons() {
+    const on = isFullscreen();
+    [dom.btnFocusFs, dom.btnReaderFs].forEach(btn => {
+      if (!btn) return;
+      try { btn.innerHTML = on ? Icons.minimize : Icons.maximize; } catch {}
+      const label = on ? t('exitFullscreen') : t('enterFullscreen');
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('aria-pressed', String(on));
+    });
   }
 
   function enterFocusMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
     if (isReaderMode) exitReaderMode(false);
+    if (isFocusMode) return;
     saveCurrentChapter({ silent: true });
     isFocusMode = true;
+    focusStartWords = liveChapterWords();
     document.documentElement.classList.add('focus-mode');
+    document.documentElement.classList.toggle('typewriter-on', typewriterOn);
+    document.documentElement.classList.toggle('parafocus-on', paraFocusOn);
     closeSidebar();
+    showHud(dom.focusHud);
+    if (Storage.getSettings().focusFullscreen !== false) requestImmersiveFullscreen();
     renderEditor();
     updateFocusReaderButtons();
-    toast(t('focusToast'), 3000);
-    setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 80);
+    updateFocusHud();
+    updateFocusFormatBar();
+    pokeImmersive();
+    // Petunjuk sekali per sesi — setelah itu nol gangguan
+    if (!hintShown.focus) { hintShown.focus = true; toast(t('focusToast'), 1800); }
+    setTimeout(() => { try { dom.editor?.focus(); } catch {} updateFocusCurrent(); }, 80);
   }
-  function exitFocusMode(showToast = true) {
+  // showToast dipertahankan demi kompatibilitas; keluar selalu hening.
+  function exitFocusMode(showToast) {
     if (!isFocusMode) return;
+    void showToast;
     isFocusMode = false;
-    document.documentElement.classList.remove('focus-mode');
+    saveCurrentChapter({ silent: true });
+    clearTimeout(idleTimer);
+    clearTimeout(peekTimer);
+    document.documentElement.classList.remove('focus-mode', 'typewriter-on', 'parafocus-on', 'immersive-idle');
     document.querySelector('#toolbar')?.classList.remove('is-peek');
+    if (dom.formatBar) dom.formatBar.classList.remove('is-visible');
+    clearFocusMarks();
+    hideHud(dom.focusHud);
+    setFocusSave(false, false);
+    releaseImmersiveFullscreen();
     renderEditor();
     updateFocusReaderButtons();
-    if (showToast) toast(t('exitFocusMode'), 2000);
     setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 50);
   }
   function toggleFocusMode() {
@@ -859,21 +1230,34 @@
   function enterReaderMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
     if (isFocusMode) exitFocusMode(false);
+    if (isReaderMode) return;
     saveCurrentChapter({ silent: true });
     isReaderMode = true;
     document.documentElement.classList.add('reader-mode');
     closeSidebar();
+    showHud(dom.readerHud);
+    if (dom.readerProgress) dom.readerProgress.hidden = false;
+    if (Storage.getSettings().readerFullscreen !== false) requestImmersiveFullscreen();
     renderEditor(); // merender tampilan baca (renderReader) karena isReaderMode aktif
     updateFocusReaderButtons();
-    toast(t('readerToast'), 3000);
+    try { if (dom.editorWrap) dom.editorWrap.scrollTop = 0; } catch {}
+    updateReaderHud();
+    pokeImmersive();
+    if (!hintShown.reader) { hintShown.reader = true; toast(t('readerToast'), 1800); }
   }
-  function exitReaderMode(showToast = true) {
+  function exitReaderMode(showToast) {
     if (!isReaderMode) return;
+    void showToast;
     isReaderMode = false;
-    document.documentElement.classList.remove('reader-mode');
+    clearTimeout(idleTimer);
+    clearTimeout(peekTimer);
+    document.documentElement.classList.remove('reader-mode', 'immersive-idle');
+    document.querySelector('#toolbar')?.classList.remove('is-peek');
+    hideHud(dom.readerHud);
+    if (dom.readerProgress) dom.readerProgress.hidden = true;
+    releaseImmersiveFullscreen();
     renderEditor();
     updateFocusReaderButtons();
-    if (showToast) toast(t('exitReaderMode'), 2000);
   }
   function toggleReaderMode() {
     if (isReaderMode) exitReaderMode();
@@ -1004,16 +1388,34 @@
     const s = Storage.getSettings();
     activeProjectId = s.lastProject;
     activeChapterId = s.lastChapter;
-    if (isFocusMode) { isFocusMode = false; document.documentElement.classList.remove('focus-mode'); document.querySelector('#toolbar')?.classList.remove('is-peek'); }
-    if (isReaderMode) { isReaderMode = false; document.documentElement.classList.remove('reader-mode'); }
+    if (isFocusMode) {
+      isFocusMode = false;
+      document.documentElement.classList.remove('focus-mode', 'typewriter-on', 'parafocus-on');
+      clearFocusMarks();
+      hideHud(dom.focusHud);
+      setFocusSave(false, false);
+    }
+    if (isReaderMode) {
+      isReaderMode = false;
+      document.documentElement.classList.remove('reader-mode');
+      hideHud(dom.readerHud);
+      if (dom.readerProgress) dom.readerProgress.hidden = true;
+    }
+    document.documentElement.classList.remove('immersive-idle');
+    document.querySelector('#toolbar')?.classList.remove('is-peek');
+    clearTimeout(idleTimer);
+    releaseImmersiveFullscreen();
     dirty = false;
     autoSaveDelay = s.autoSaveDelay || 1000;
+    typewriterOn = s.typewriter !== false;
+    paraFocusOn = s.paraFocus !== false;
     applyTheme(s.theme);
     applyLanguage(s.lang);
     const langSel = $('#set-lang'); if (langSel) langSel.value = s.lang;
     applyFontSize(s.fontSize);
     applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(autoSaveDelay);
+    applyReaderFont(s.readerFont || 19);
     setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
     applySidebarLabels();
@@ -1189,6 +1591,58 @@
     dom.btnReader?.addEventListener('click', toggleReaderMode);
     $('#btn-theme')?.addEventListener('click', toggleTheme);
 
+    // ---- HUD Mode Fokus ----
+    dom.btnTypewriter?.addEventListener('click', () => {
+      typewriterOn = !typewriterOn;
+      persist(Storage.saveSettings({ typewriter: typewriterOn }));
+      document.documentElement.classList.toggle('typewriter-on', typewriterOn);
+      const box = $('#set-typewriter'); if (box) box.checked = typewriterOn;
+      updateFocusCurrent();
+      updateFocusReaderButtons();
+      pokeImmersive();
+    });
+    dom.btnParafocus?.addEventListener('click', () => {
+      paraFocusOn = !paraFocusOn;
+      persist(Storage.saveSettings({ paraFocus: paraFocusOn }));
+      document.documentElement.classList.toggle('parafocus-on', paraFocusOn);
+      const box = $('#set-parafocus'); if (box) box.checked = paraFocusOn;
+      updateFocusCurrent();
+      updateFocusReaderButtons();
+      pokeImmersive();
+    });
+    const toggleNativeFullscreen = () => {
+      if (isFullscreen()) releaseImmersiveFullscreen();
+      else requestImmersiveFullscreen();
+      pokeImmersive();
+    };
+    dom.btnFocusFs?.addEventListener('click', toggleNativeFullscreen);
+    dom.btnReaderFs?.addEventListener('click', toggleNativeFullscreen);
+    dom.btnExitFocus?.addEventListener('click', () => exitFocusMode());
+    dom.btnExitReader?.addEventListener('click', () => exitReaderMode());
+
+    // ---- HUD Mode Baca ----
+    dom.btnPrevCh?.addEventListener('click', () => gotoReaderChapter(-1));
+    dom.btnNextCh?.addEventListener('click', () => gotoReaderChapter(1));
+    dom.btnReaderDec?.addEventListener('click', () => {
+      applyReaderFont(readerFontSize - 1);
+      persist(Storage.saveSettings({ readerFont: readerFontSize }));
+      updateReaderHud();
+      pokeImmersive();
+    });
+    dom.btnReaderInc?.addEventListener('click', () => {
+      applyReaderFont(readerFontSize + 1);
+      persist(Storage.saveSettings({ readerFont: readerFontSize }));
+      updateReaderHud();
+      pokeImmersive();
+    });
+    dom.editorWrap?.addEventListener('scroll', () => { if (isReaderMode) updateReaderHud(); }, { passive: true });
+
+    // HUD tak boleh mencuri fokus ketikan
+    [dom.focusHud, dom.readerHud].forEach(h => {
+      h?.addEventListener('pointerdown', (e) => { e.stopPropagation(); pokeImmersive(); });
+      h?.addEventListener('mousedown', (e) => { e.preventDefault(); });
+    });
+
     dom.btnExport?.addEventListener('click', () => openModal('modal-export'));
     $$('.btn-export-opt').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -1229,6 +1683,12 @@
       applyFontSize(s.fontSize);
       applyLineHeight(s.lineHeight || 1.8);
       applyAutoSave(s.autoSaveDelay || 1000);
+      applyReaderFont(s.readerFont || 19);
+      const setBox = (id, val) => { const el = $(id); if (el) el.checked = !!val; };
+      setBox('#set-focus-fullscreen', s.focusFullscreen !== false);
+      setBox('#set-reader-fullscreen', s.readerFullscreen !== false);
+      setBox('#set-typewriter', s.typewriter !== false);
+      setBox('#set-parafocus', s.paraFocus !== false);
       updateUndoRestoreButton();
       openModal('modal-settings');
     });
@@ -1258,6 +1718,32 @@
       const delay = parseInt(e.target.value, 10);
       applyAutoSave(delay);
       persist(Storage.saveSettings({ autoSaveDelay: delay }));
+    });
+
+    $('#set-focus-fullscreen')?.addEventListener('change', (e) => {
+      persist(Storage.saveSettings({ focusFullscreen: e.target.checked }));
+    });
+    $('#set-reader-fullscreen')?.addEventListener('change', (e) => {
+      persist(Storage.saveSettings({ readerFullscreen: e.target.checked }));
+    });
+    $('#set-typewriter')?.addEventListener('change', (e) => {
+      typewriterOn = e.target.checked;
+      persist(Storage.saveSettings({ typewriter: typewriterOn }));
+      document.documentElement.classList.toggle('typewriter-on', typewriterOn);
+      updateFocusCurrent();
+      updateFocusReaderButtons();
+    });
+    $('#set-parafocus')?.addEventListener('change', (e) => {
+      paraFocusOn = e.target.checked;
+      persist(Storage.saveSettings({ paraFocus: paraFocusOn }));
+      document.documentElement.classList.toggle('parafocus-on', paraFocusOn);
+      updateFocusCurrent();
+      updateFocusReaderButtons();
+    });
+    $('#set-readerfont')?.addEventListener('input', (e) => {
+      applyReaderFont(parseInt(e.target.value, 10));
+      persist(Storage.saveSettings({ readerFont: readerFontSize }));
+      updateReaderHud();
     });
 
     $('#btn-backup')?.addEventListener('click', backupData);
@@ -1296,6 +1782,11 @@
       if (mod && e.shiftKey && key === 'r') { e.preventDefault(); toggleReaderMode(); return; }
       if (e.key === 'F9' && !mod) { e.preventDefault(); toggleFocusMode(); return; }
       if (e.key === 'F10' && !mod) { e.preventDefault(); toggleReaderMode(); return; }
+      if (isReaderMode && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        gotoReaderChapter(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
 
       if (e.key === 'Escape') {
         if (modalOpen()) closeModal();
@@ -1324,20 +1815,43 @@
     window.addEventListener('storage', onExternalStorage);
   }
 
-    // ---- toolbar peek di focus-mode ----
-    let _peekTimer = null;
+    // ---- Aktivitas pengguna saat imersif: tampilkan chrome + intip toolbar ----
     document.addEventListener('mousemove', (e) => {
-      if (!isFocusMode) return;
-      const tb = document.querySelector('#toolbar');
-      if (!tb) return;
-      if (e.clientY < 56) {
-        tb.classList.add('is-peek');
-        clearTimeout(_peekTimer);
-      } else if (!tb.matches(':hover') && !tb.contains(document.activeElement)) {
-        clearTimeout(_peekTimer);
-        _peekTimer = setTimeout(() => tb.classList.remove('is-peek'), 900);
-      }
+      if (!immersiveActive()) return;
+      pokeImmersive();
+      peekToolbarIfNeeded(e.clientY);
+    }, { passive: true });
+    document.addEventListener('pointerdown', (e) => {
+      if (!immersiveActive()) return;
+      pokeImmersive();
+      if (e && typeof e.clientY === 'number') peekToolbarIfNeeded(e.clientY);
+    }, { passive: true });
+    document.addEventListener('wheel', () => { if (immersiveActive()) pokeImmersive(); }, { passive: true });
+    document.addEventListener('touchstart', (e) => {
+      if (!immersiveActive()) return;
+      pokeImmersive();
+      try {
+        const y = e.touches && e.touches[0] && e.touches[0].clientY;
+        if (typeof y === 'number') peekToolbarIfNeeded(y);
+      } catch {}
+    }, { passive: true });
+    document.addEventListener('keydown', () => { if (immersiveActive()) pokeImmersive(); });
+    document.addEventListener('selectionchange', () => {
+      if (!immersiveActive()) return;
+      updateFocusCurrent();
+      updateFocusFormatBar();
     });
+    const onFullscreenChange = () => {
+      updateFullscreenButtons();
+      if (isFullscreen()) return;
+      immersiveFullscreen = false;
+      // Esc bawaan browser keluar dari fullscreen duluan (keydown tak sampai):
+      // ikut keluar dari mode imersif agar tidak nyangkut setengah jalan.
+      if (isFocusMode) exitFocusMode(false);
+      else if (isReaderMode) exitReaderMode(false);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
   // ============ REGISTER PWA SERVICE WORKER ============
   function registerServiceWorker() {
@@ -1385,6 +1899,9 @@
     applyFontSize(s.fontSize);
     applyLineHeight(s.lineHeight || 1.8);
     applyAutoSave(s.autoSaveDelay || 1000);
+    typewriterOn = s.typewriter !== false;
+    paraFocusOn = s.paraFocus !== false;
+    applyReaderFont(s.readerFont || 19);
     // terapkan preferensi sidebar (tanpa persist)
     setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
@@ -1430,7 +1947,7 @@
       flushNow,
       renderAll,
       get state() {
-        return { activeProjectId, activeChapterId, isFocusMode, isReaderMode, dirty };
+        return { activeProjectId, activeChapterId, isFocusMode, isReaderMode, dirty, typewriterOn, paraFocusOn, readerFontSize };
       }
     };
   }

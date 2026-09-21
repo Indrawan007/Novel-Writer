@@ -7,7 +7,7 @@
      • CDN (html2pdf/docx, lazy-load saat ekspor) -> network-first + cache fallback
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v8';
+const CACHE_NAME = 'novel-writer-v9';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.

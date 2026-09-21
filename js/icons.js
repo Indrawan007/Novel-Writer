@@ -37,7 +37,11 @@
     italic:   svg('<path d="M19 4.5h-8M13 19.5H5M15.5 4.5l-5.5 15"/>', 15),
     heading:  svg('<path d="M6 4.5v15M18 4.5v15M6 12h12"/>', 15),
     quote:    svg('<path d="M5 5.5v13"/><path d="M10 7.5h9M10 12h9M10 16.5h6"/>', 15),
-    scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15)
+    scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15),
+    chevronLeft:  svg('<path d="M15 18l-6-6 6-6"/>', 15),
+    chevronRight: svg('<path d="M9 18l6-6-6-6"/>', 15),
+    typewriter:   svg('<rect x="3" y="11" width="18" height="8" rx="2"/><path d="M7 15h.01M11 15h.01M15 15h.01M7 7.5h10M9.5 7.5v-2h5v2"/>', 15),
+    paragraph:    svg('<path d="M10 20V7a3 3 0 0 1 3-3h4a4 4 0 0 1 0 8h-7"/><path d="M10 4v16"/>', 15)
   };
 
   function hydrateIcons(root) {

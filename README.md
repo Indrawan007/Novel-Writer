@@ -14,8 +14,12 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   (**Tebal**, **Miring**, **Subjudul**, **Kutipan**, **Jeda adegan**) menerapkan
   format sungguhan; tidak ada `**`, `#`, atau penanda apa pun yang diketik/disimpan.
   Tekan Enter untuk paragraf baru; baris kosong = jeda (mis. ganti adegan)
-- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — bab tampil
-  seperti halaman buku, format ikut tampil utuh
+- **Mode Fokus** (`Ctrl+Shift+F` / `F9`) & **Mode Baca** (`Ctrl+Shift+R` / `F10`) —
+  imersif penuh: fullscreen otomatis, semua chrome (sidebar, toolbar, panel
+  format, HUD) lenyap total dan hanya muncul saat ada aktivitas; kursor pun
+  disembunyikan saat idle. Fokus: mesin ketik (kursor di tengah), fokus
+  paragraf (sekitar redup), penghitung kata sesi. Baca: halaman buku dengan
+  judul bab, bilah progres, navigasi bab, estimasi sisa baca
 - **Auto-save** (interval 0,5–5 detik, bisa diatur) + **flush otomatis saat tab ditutup**
 - Statistik kata (tanda baca yang berdiri sendiri tidak dihitung)
 - Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel (format tebal/miring/
@@ -79,6 +83,7 @@ python3 -m http.server 8000
 | `Ctrl+B` / `Ctrl+I` | Tebal / Miring pada seleksi |
 | `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle) |
 | `Ctrl+Shift+R` / `F10` | Mode Baca (toggle) |
+| `Alt+←` / `Alt+→` | Bab sebelum/sesudah (saat Mode Baca) |
 | `Tab` / `Shift+Tab` | Indent / un-indent **per paragraf** pada seleksi |
 | `Alt+↑` / `Alt+↓` | Pindahkan bab (saat fokus di daftar bab) |
 | `Enter` / `Spasi` | Buka proyek/bab (saat fokus di daftar) |
@@ -109,13 +114,14 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 48 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 51 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
 jeda adegan, tanpa penyisipan penanda), regresi "Tab menghapus seleksi",
 flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
-sanitasi (script/handler tidak ikut hidup), keamanan restore, ekspor
+sanitasi (script/handler tidak ikut hidup), keamanan restore, HUD imersif
+(kata sesi, navigasi bab, progres baca, font baca, toggle persisten), ekspor
 (TXT/DOCX menghormati format), i18n, fokus modal, urutan bab (keyboard & drag),
 sinkronisasi antar-tab, konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
 jaminan **tanpa parser sintaks** di seluruh produk.
@@ -144,6 +150,25 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.4
+
+- **Mode Fokus & Mode Baca imersif penuh** — fullscreen otomatis saat masuk
+  (bisa dimatikan per mode di Pengaturan), seluruh chrome lenyap: sidebar,
+  toolbar (muncul saat tepi atas disentuh), panel format (hanya saat ada
+  seleksi), HUD mengambang (sembunyi setelah 2,6 dtk idle), bahkan kursor.
+  Petunjuk toast hanya sekali per sesi; keluar selalu hening.
+- **Mode Fokus**: efek mesin ketik (paragraf aktif dijaga di tengah layar),
+  fokus paragraf (paragraf lain diredupkan), HUD kata (total + perolehan sesi)
+  dan titik status simpan — semua toggle tersimpan dan bisa diubah dari HUD
+  maupun Pengaturan.
+- **Mode Baca**: judul bab kini tampil sebagai kepala halaman (huruf awal
+  bab bergaya cetakan), bilah progres 3px, HUD baca berisi navigasi
+  bab sebelum/sesudah (juga `Alt+←/→`), posisi (`Bab X dari N • % • sisa
+  baca`), dan pengatur ukuran huruf khusus baca yang persisten.
+- **Perbaikan**: judul bab yang hilang di Mode Baca dikembalikan; ekspor TXT
+  seluruh novel kini mencantumkan judul tiap bab (dua-duanya sebelumnya gagal
+  di test suite).
 
 ## Catatan Rilis v1.3
 

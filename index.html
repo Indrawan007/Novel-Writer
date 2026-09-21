@@ -320,6 +320,21 @@
       </div>
 
       <div class="form-group">
+        <label data-i18n="immersiveSettings">Mode Imersif</label>
+        <div class="check-list">
+          <label class="check-label"><input type="checkbox" id="set-focus-fullscreen" checked> <span data-i18n="focusFullscreen">Layar penuh otomatis (Mode Fokus)</span></label>
+          <label class="check-label"><input type="checkbox" id="set-reader-fullscreen" checked> <span data-i18n="readerFullscreen">Layar penuh otomatis (Mode Baca)</span></label>
+          <label class="check-label"><input type="checkbox" id="set-typewriter" checked> <span data-i18n="typewriterMode">Mesin ketik \u2014 jaga kursor di tengah</span></label>
+          <label class="check-label"><input type="checkbox" id="set-parafocus" checked> <span data-i18n="paraFocus">Fokus paragraf \u2014 redupkan sekitarnya</span></label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="set-readerfont"><span data-i18n="readerFont">Font Mode Baca</span> <output id="readerfont-val" for="set-readerfont">19px</output></label>
+        <input type="range" id="set-readerfont" class="custom-range" min="14" max="28" step="1" value="19">
+      </div>
+
+      <div class="form-group">
         <label data-i18n="backupRestore">Cadangan &amp; Pulihkan</label>
         <div class="backup-btns">
           <button class="btn-ghost" id="btn-backup">
@@ -343,8 +358,8 @@
         <div class="shortcuts-grid">
           <div><kbd>Ctrl</kbd> + <kbd>S</kbd> <span data-i18n="shortcutSave">Simpan</span></div>
           <div><kbd>Ctrl</kbd> + <kbd>B</kbd>/<kbd>I</kbd> <span data-i18n="shortcutBoldItalic">Tebal / Miring</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> <span data-i18n="focusMode">Mode Fokus</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> <span data-i18n="readerMode">Mode Baca</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> / <kbd>F9</kbd> <span data-i18n="focusMode">Mode Fokus</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> / <kbd>F10</kbd> <span data-i18n="readerMode">Mode Baca</span></div>
           <div><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span data-i18n="shortcutIndent">Indent</span></div>
           <div><kbd>Alt</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> <span data-i18n="shortcutReorder">Urutkan bab</span></div>
           <div><kbd>Esc</kbd> <span data-i18n="shortcutClose">Tutup modal</span></div>
@@ -369,6 +384,50 @@
 
   <!-- Toast -->
   <div id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Chrome imersif: bilah progres baca + HUD mengambang (sembunyi otomatis saat idle) -->
+  <div id="reader-progress" hidden aria-hidden="true"><div id="reader-progress-fill"></div></div>
+
+  <div id="focus-hud" class="immersive-hud is-hidden" hidden role="toolbar" data-i18n-aria="focusMode" aria-label="Mode Fokus">
+    <span id="focus-save" class="hud-save" hidden><span class="save-dot" aria-hidden="true"></span></span>
+    <span id="focus-words" class="hud-meta">0 kata</span>
+    <span class="hud-dot" aria-hidden="true"></span>
+    <span id="focus-session" class="hud-meta hud-hide-sm">+0</span>
+    <span class="hud-sep" aria-hidden="true"></span>
+    <button type="button" id="btn-typewriter" class="hud-btn" data-i18n-title="typewriterMode" data-i18n-aria="typewriterMode" title="Mesin ketik" aria-label="Mesin ketik" aria-pressed="true">
+      <span class="icon" data-icon="typewriter" aria-hidden="true"></span>
+    </button>
+    <button type="button" id="btn-parafocus" class="hud-btn" data-i18n-title="paraFocus" data-i18n-aria="paraFocus" title="Fokus paragraf" aria-label="Fokus paragraf" aria-pressed="true">
+      <span class="icon" data-icon="paragraph" aria-hidden="true"></span>
+    </button>
+    <button type="button" id="btn-focus-fullscreen" class="hud-btn" title="Layar penuh" aria-label="Layar penuh" aria-pressed="false">
+      <span class="icon" data-icon="maximize" aria-hidden="true"></span>
+    </button>
+    <button type="button" id="btn-exit-focus" class="hud-btn hud-exit">
+      <span class="icon" data-icon="close" aria-hidden="true"></span>
+      <span class="hud-exit-label" data-i18n="exitImmersive">Keluar (Esc)</span>
+    </button>
+  </div>
+
+  <div id="reader-hud" class="immersive-hud is-hidden" hidden role="toolbar" data-i18n-aria="readerMode" aria-label="Mode Baca">
+    <button type="button" id="btn-prev-ch" class="hud-btn" data-i18n-title="prevChapter" data-i18n-aria="prevChapter" title="Bab sebelumnya" aria-label="Bab sebelumnya">
+      <span class="icon" data-icon="chevronLeft" aria-hidden="true"></span>
+    </button>
+    <span id="reader-pos" class="hud-meta">Bab 1 dari 1 • 0%</span>
+    <button type="button" id="btn-next-ch" class="hud-btn" data-i18n-title="nextChapter" data-i18n-aria="nextChapter" title="Bab berikutnya" aria-label="Bab berikutnya">
+      <span class="icon" data-icon="chevronRight" aria-hidden="true"></span>
+    </button>
+    <span class="hud-sep" aria-hidden="true"></span>
+    <button type="button" id="btn-reader-dec" class="hud-btn hud-text" data-i18n-title="decreaseFont" data-i18n-aria="decreaseFont" title="Kecilkan huruf" aria-label="Kecilkan huruf">A-</button>
+    <button type="button" id="btn-reader-inc" class="hud-btn hud-text" data-i18n-title="increaseFont" data-i18n-aria="increaseFont" title="Besarkan huruf" aria-label="Besarkan huruf">A+</button>
+    <button type="button" id="btn-reader-fullscreen" class="hud-btn" title="Layar penuh" aria-label="Layar penuh" aria-pressed="false">
+      <span class="icon" data-icon="maximize" aria-hidden="true"></span>
+    </button>
+    <button type="button" id="btn-exit-reader" class="hud-btn hud-exit">
+      <span class="icon" data-icon="close" aria-hidden="true"></span>
+      <span class="hud-exit-label" data-i18n="exitImmersive">Keluar (Esc)</span>
+    </button>
+  </div>
 
     <script src="js/i18n.js"></script>
     <script src="js/storage.js"></script>
