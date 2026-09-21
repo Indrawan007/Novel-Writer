@@ -402,3 +402,71 @@ test('drag & drop mouse memindahkan bab', async () => {
   const order = [...S.getProject('p1').chapters].sort((a, b) => a.order - b.order).map(c => c.id);
   assert.equal(order.join(','), 'c3,c1,c2');
 });
+
+test('mode fokus imersif: HUD kata sesi, toggle persisten, Esc keluar hening', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-focus'));
+  const root = w.document.documentElement;
+  assert.equal(root.classList.contains('focus-mode'), true);
+  assert.equal($('#focus-hud').hidden, false);
+  assert.equal(root.classList.contains('typewriter-on'), true);
+  assert.equal(root.classList.contains('parafocus-on'), true);
+  assert.match($('#focus-words').textContent, /0 kata/);
+
+  type(w, $('#editor'), 'satu dua tiga');
+  assert.match($('#focus-words').textContent, /3 kata/);
+  assert.match($('#focus-session').textContent, /\+3 sesi ini/);
+
+  click(w, $('#btn-typewriter'));
+  assert.equal(S.getSettings().typewriter, false);
+  assert.equal(root.classList.contains('typewriter-on'), false);
+  assert.equal($('#btn-typewriter').getAttribute('aria-pressed'), 'false');
+
+  key(w, w.document, { key: 'Escape' });
+  assert.equal(root.classList.contains('focus-mode'), false);
+  assert.equal($('#focus-hud').hidden, true);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode baca imersif: navigasi bab, progres, font persisten', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-reader'));
+  const root = w.document.documentElement;
+  assert.equal(root.classList.contains('reader-mode'), true);
+  assert.equal($('#reader-hud').hidden, false);
+  assert.equal($('#reader-progress').hidden, false);
+  assert.equal($('#btn-prev-ch').disabled, true);
+  assert.equal($('#btn-next-ch').disabled, false);
+  assert.match($('#reader-pos').textContent, /Bab 1 dari 3/);
+
+  click(w, $('#btn-next-ch'));
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2');
+  assert.match($('#reader-pos').textContent, /Bab 2 dari 3/);
+  assert.equal($('#btn-prev-ch').disabled, false);
+  assert.equal($('#reader-view').querySelector('h1').textContent, 'Bab 2');
+
+  click(w, $('#btn-reader-inc'));
+  assert.equal(S.getSettings().readerFont, 20);
+  assert.equal(root.style.getPropertyValue('--reader-size'), '20px');
+
+  key(w, w.document, { key: 'Escape' });
+  assert.equal(root.classList.contains('reader-mode'), false);
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2', 'pindah bab bertahan setelah keluar');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('pengaturan imersif tersimpan dan diterapkan', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-settings'));
+  assert.equal($('#set-typewriter').checked, true);
+  assert.equal($('#set-focus-fullscreen').checked, true);
+  $('#set-parafocus').checked = false;
+  $('#set-parafocus').dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.equal(S.getSettings().paraFocus, false);
+  $('#set-readerfont').value = '22';
+  $('#set-readerfont').dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.equal(S.getSettings().readerFont, 22);
+  assert.equal(w.document.documentElement.style.getPropertyValue('--reader-size'), '22px');
+  click(w, $('#modal-settings [data-close]'));
+  assert.deepEqual(w.__errors, []);
+});

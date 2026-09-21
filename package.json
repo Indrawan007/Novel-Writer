@@ -1,6 +1,6 @@
 {
   "name": "novel-writer",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Aplikasi web minimalis untuk menulis novel — distraction-free, offline-first (PWA), tanpa backend.",
   "type": "module",

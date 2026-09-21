@@ -99,6 +99,7 @@ const Exporter = {
     if (data.author) out += data.author + nl;
     data.sections.forEach(sec => {
       out += nl + nl;
+      if (sec.heading) out += sec.heading + nl + nl;
       const isi = sec.format === 'html'
         ? RichText.toPlainText(sec.content)
         : String(sec.content || '');

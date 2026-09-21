@@ -28,7 +28,12 @@ const Storage = {
         lang: 'id',
         lastProject: null,
         lastChapter: null,
-        sidebarCollapsed: false
+        sidebarCollapsed: false,
+        focusFullscreen: true,
+        readerFullscreen: true,
+        typewriter: true,
+        paraFocus: true,
+        readerFont: 19
       }
     };
   },
@@ -157,7 +162,12 @@ const Storage = {
       lang: s.lang === 'en' ? 'en' : 'id',
       lastProject: typeof s.lastProject === 'string' ? s.lastProject : null,
       lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null,
-      sidebarCollapsed: s.sidebarCollapsed === true
+      sidebarCollapsed: s.sidebarCollapsed === true,
+      focusFullscreen: s.focusFullscreen !== false,
+      readerFullscreen: s.readerFullscreen !== false,
+      typewriter: s.typewriter !== false,
+      paraFocus: s.paraFocus !== false,
+      readerFont: clamp(s.readerFont, d.readerFont, 14, 28)
     };
   },
 
