@@ -1,6 +1,6 @@
 {
   "name": "novel-writer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Aplikasi web minimalis untuk menulis novel — distraction-free, offline-first (PWA), tanpa backend.",
   "type": "module",
@@ -11,7 +11,6 @@
     "test": "node --test test/*.test.js"
   },
   "devDependencies": {
-    "jsdom": "^24.1.3",
-    "marked": "^12.0.2"
+    "jsdom": "^24.1.3"
   }
 }

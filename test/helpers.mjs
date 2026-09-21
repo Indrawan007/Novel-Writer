@@ -2,17 +2,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
-import { marked } from 'marked';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
-export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/markdown.js', 'js/export.js', 'js/app.js'];
+export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/export.js', 'js/app.js'];
 
 /**
  * Muat aplikasi nyata (index.html + semua skrip) ke jsdom.
  * `seed` = isi awal localStorage['novel-writer-data'].
- * `stubCdn` = sediakan `marked` global seperti tag CDN di index.html.
  */
-export async function createApp({ seed = null, stubCdn = true } = {}) {
+export async function createApp({ seed = null } = {}) {
   const dom = new JSDOM(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'), {
     runScripts: 'outside-only',
     pretendToBeVisual: true,
@@ -21,13 +19,12 @@ export async function createApp({ seed = null, stubCdn = true } = {}) {
   const w = dom.window;
   w.__errors = [];
   w.addEventListener('error', (e) => w.__errors.push(String(e.message || e)));
-  if (stubCdn) w.marked = { parse: (s) => marked.parse(s) };
   if (seed) w.localStorage.setItem('novel-writer-data', JSON.stringify(seed));
 
   const bundle = SCRIPTS
     .map((f) => `/* == ${f} == */\n` + fs.readFileSync(path.join(ROOT, f), 'utf8'))
     .join('\n;\n')
-    + '\n;window.NW = { Storage, Markdown, Exporter, I18N, Icons, t, applyLanguage };';
+    + '\n;window.NW = { Storage, TextUtil, Exporter, I18N, Icons, t, applyLanguage };';
   w.eval(bundle);
 
   if (w.document.readyState === 'loading') {
@@ -71,7 +68,7 @@ export function setFileInput(w, input, name, text, mime = 'application/json') {
   input.dispatchEvent(new w.Event('change', { bubbles: true }));
 }
 
-/** Muat modul logika murni (storage/markdown/export) ke konteks Node + vm. */
+/** Muat modul logika murni (storage/text/export) ke konteks Node + vm. */
 export async function loadLogic() {
   const vm = await import('node:vm');
   const store = new Map();
@@ -88,10 +85,10 @@ export async function loadLogic() {
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  for (const f of ['js/storage.js', 'js/markdown.js', 'js/export.js']) {
+  for (const f of ['js/storage.js', 'js/text.js', 'js/export.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f });
   }
-  const refs = vm.runInContext('({ Storage, Markdown, Exporter })', sandbox);
+  const refs = vm.runInContext('({ Storage, TextUtil, Exporter })', sandbox);
   return { ...refs, sandbox };
 }
 

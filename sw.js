@@ -4,10 +4,10 @@
      • Navigasi (index.html)  -> network-first, fallback cache
        (update UI langsung terasa, tetap jalan offline)
      • Aset lokal             -> stale-while-revalidate
-     • CDN (marked/html2pdf/docx) -> network-first + cache fallback
+     • CDN (html2pdf/docx, lazy-load saat ekspor) -> network-first + cache fallback
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v6';
+const CACHE_NAME = 'novel-writer-v7';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.
@@ -20,6 +20,10 @@ const ASSETS = [
   'css/style.css',
   'js/i18n.js',
   'js/storage.js',
+  'js/icons.js',
+  'js/text.js',
+  'js/export.js',
+  'js/app.js',
   'manifest.json',
   'icons/icon-192.png',
   'icons/icon-512.png'
@@ -63,7 +67,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // --- CDN (marked, html2pdf, docx): network-first, fallback cache ---
+  // --- CDN (html2pdf, docx): network-first, fallback cache ---
   if (url.origin !== self.location.origin) {
     if (!isCdnHost(url.hostname)) return; // biarkan request lain apa adanya
     event.respondWith(
