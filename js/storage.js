@@ -110,6 +110,9 @@ const Storage = {
       id: this._safeId(c.id),
       title: typeof c.title === 'string' ? c.title.slice(0, 300) : '',
       content: typeof c.content === 'string' ? c.content : '',
+      // 'html' = isi tersimpan sebagai HTML kanonik (js/richtext.js);
+      // selain itu = teks polos lama (satu baris = satu paragraf)
+      format: c.format === 'html' ? 'html' : 'text',
       order: Number.isFinite(order) ? order : idx + 1,
       createdAt: typeof c.createdAt === 'string' ? c.createdAt : now,
       updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : now,
@@ -250,7 +253,9 @@ const Storage = {
     projects.forEach(p => {
       (Array.isArray(p.chapters) ? p.chapters : []).forEach(c => {
         chapters++;
-        const txt = typeof c.content === 'string' ? c.content.trim() : '';
+        // tag HTML tidak dihitung sebagai kata
+        const txt = (typeof c.content === 'string' ? c.content : '')
+          .replace(/<[^>]*>/g, ' ').trim();
         if (txt) words += txt.split(/\s+/).length;
       });
     });

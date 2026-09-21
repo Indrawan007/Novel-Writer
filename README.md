@@ -1,34 +1,59 @@
 # Novel Writer
 
-Aplikasi web minimalis untuk menulis novel — **teks polos** (tanpa Markdown), _distraction-free_,
-**offline-first (PWA)**, tanpa backend. Seluruh data tersimpan di `localStorage` browser.
+Aplikasi web minimalis untuk menulis novel — **editor teks berformat (WYSIWYG)**
+sebagai pengganti Markdown: tebal, miring, subjudul, kutipan, dan jeda adegan
+tanpa menulis sintaks apa pun. _Distraction-free_, **offline-first (PWA)**,
+tanpa backend. Seluruh data tersimpan di `localStorage` browser.
 
 ## Fitur
 
 - Manajemen **proyek & bab** (buat, ganti nama, hapus)
 - Urutkan bab dengan **drag & drop** (mouse), **tahan-lalu-geser** (layar sentuh),
   atau **Alt + ↑/↓** (keyboard)
-- Editor **teks polos** — apa yang diketik, itulah yang tersimpan; tanpa sintaks apa pun.
-  Satu baris = satu paragraf; baris kosong = jeda (mis. ganti adegan)
-- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — bab tampil seperti halaman buku
+- **Editor teks berformat (WYSIWYG)** — pengganti Markdown: panel format
+  (**Tebal**, **Miring**, **Subjudul**, **Kutipan**, **Jeda adegan**) menerapkan
+  format sungguhan; tidak ada `**`, `#`, atau penanda apa pun yang diketik/disimpan.
+  Tekan Enter untuk paragraf baru; baris kosong = jeda (mis. ganti adegan)
+- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — bab tampil
+  seperti halaman buku, format ikut tampil utuh
 - **Auto-save** (interval 0,5–5 detik, bisa diatur) + **flush otomatis saat tab ditutup**
 - Statistik kata (tanda baca yang berdiri sendiri tidak dihitung)
-- Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel
+- Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel (format tebal/miring/
+  judul ikut terbawa ke PDF & DOCX; TXT dilumat jadi teks polos tanpa penanda)
 - **Cadangkan & pulihkan** data: konfirmasi ber-ringkasan sebelum menimpa,
   snapshot otomatis, dan **undo restore** dari Pengaturan
 - **Sinkronisasi antar-tab** (tab lain menulis → data diadopsi, ketikan lokal tidak dibuang)
 - Tema gelap/terang, ukuran font & tinggi baris bisa diatur
 - Bilingual: **Indonesia / English** (termasuk tooltip & label aksesibilitas)
-- **Aman**: isi bab tidak pernah di-parse sebagai HTML — Mode Baca & ekspor PDF memakai
-  `textContent`; id dari file backup divalidasi
+- **Aman**: isi bab melewati sanitasi allowlist ketat — hanya `p/h2/blockquote/
+  strong/em` yang hidup; script, handler acara, atribut berbahaya, dan tag asing
+  dibuang. Node DOM selalu dibangun ulang (tanpa `innerHTML` dari data pengguna).
+  Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
+  backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 39 kasus (Node + jsdom) + CI
+- **Test suite** 48 kasus (Node + jsdom) + CI
 
 ## Desain
 
 Tema _editorial_: kertas hangat, tinta, dan aksen oxblood (merah pena penyunting).
 Permukaan menulis memakai serif; ikon berupa SVG stroke — tanpa emoji.
 Layout responsif: sidebar menjadi _off-canvas_ di layar sempit.
+
+### Model dokumen
+
+Isi bab disimpan dalam satu bentuk kanonik (format `html`):
+
+| Elemen | Arti |
+|---|---|
+| `<p>` | paragraf |
+| `<p class="gap">` | paragraf setelah jeda (baris kosong sebelumnya) |
+| `<p class="scene">* * *</p>` | jeda adegan |
+| `<h2>` | subjudul bagian |
+| `<blockquote>` | kutipan |
+| `<strong>` / `<em>` | tebal / miring |
+
+Isi lama (format `text`, tanpa properti format) tetap didukung penuh:
+satu baris = satu paragraf, baris kosong = jeda — tampil dan diekspor apa adanya.
 
 ## Menjalankan
 
@@ -51,9 +76,10 @@ python3 -m http.server 8000
 | Tombol | Fungsi |
 |---|---|
 | `Ctrl+S` | Simpan sekarang |
+| `Ctrl+B` / `Ctrl+I` | Tebal / Miring pada seleksi |
 | `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle) |
 | `Ctrl+Shift+R` / `F10` | Mode Baca (toggle) |
-| `Tab` / `Shift+Tab` | Indent / un-indent **per baris** pada seluruh seleksi |
+| `Tab` / `Shift+Tab` | Indent / un-indent **per paragraf** pada seleksi |
 | `Alt+↑` / `Alt+↓` | Pindahkan bab (saat fokus di daftar bab) |
 | `Enter` / `Spasi` | Buka proyek/bab (saat fokus di daftar) |
 | `Esc` | Tutup modal → keluar Mode Fokus/Baca → tutup sidebar (berurutan) |
@@ -61,13 +87,14 @@ python3 -m http.server 8000
 ## Struktur Proyek
 
 ```
-index.html            Struktur UI (sidebar, editor, modal)
+index.html            Struktur UI (sidebar, panel format, editor, modal)
 css/style.css         Tema editorial light/dark (CSS variables), layout, responsif
 js/storage.js         Lapisan data (cache in-memory + localStorage, key: novel-writer-data)
 js/i18n.js            Terjemahan ID/EN (teks, placeholder, title, aria-label)
 js/icons.js           Ikon SVG stroke inline (tanpa emoji)
-js/markdown.js        Render Markdown aman + hitung kata + teks polos
-js/export.js          Modul ekspor (Markdown / PDF / DOCX)
+js/text.js            Utilitas teks polos (paragraf, hitung kata)
+js/richtext.js        Model blok + sanitasi allowlist + operasi seleksi (WYSIWYG)
+js/export.js          Modul ekspor (TXT / PDF / DOCX)
 js/app.js             Inti aplikasi (state, render, CRUD, editor, DnD, PWA)
 sw.js                 Service Worker (navigasi network-first, aset SWR)
 manifest.json         Manifest PWA
@@ -82,13 +109,16 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 39 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 48 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
-Cakupan: CRUD & auto-save, regresi "Tab menghapus seleksi", flush saat unload,
-kuota penuh, Mode Baca & keamanan restore, ekspor teks polos, i18n, fokus modal,
-urutan bab (keyboard & drag), sinkronisasi antar-tab, konsistensi
-markup↔kamus↔ikon↔SW↔manifest, serta jaminan **tidak ada sisa Markdown**.
+Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
+jeda adegan, tanpa penyisipan penanda), regresi "Tab menghapus seleksi",
+flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
+sanitasi (script/handler tidak ikut hidup), keamanan restore, ekspor
+(TXT/DOCX menghormati format), i18n, fokus modal, urutan bab (keyboard & drag),
+sinkronisasi antar-tab, konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
+jaminan **tanpa parser sintaks** di seluruh produk.
 
 ## Regenerasi Ikon
 
@@ -115,13 +145,33 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
 
+## Catatan Rilis v1.3
+
+- **Editor teks berformat (WYSIWYG) menggantikan penyunting teks polos** —
+  panel format: **Tebal** (`Ctrl+B`), **Miring** (`Ctrl+I`), **Subjudul**,
+  **Kutipan**, dan **Jeda adegan** (`* * *`). Semua operasi bekerja pada model
+  DOM; tidak ada karakter penanda yang perlu diketik, dan tidak ada mode
+  pratinjau terpisah — yang ditulis, itulah tampilannya.
+- **Model dokumen kanonik** (`js/richtext.js`): blok `p / h2 / blockquote`
+  dengan penanda inline `strong / em`. Semua masukan (ketikan browser, tempel,
+  backup) dinormalisasi lewat **sanitasi allowlist ketat** — script, handler
+  acara, atribut, dan tag asing dibuang; node dibangun ulang tanpa `innerHTML`.
+- **Mode Baca & ekspor** mengikuti format: PDF/DOCX membawa tebal/miring/judul/
+  kutipan/jeda adegan; TXT dilumat jadi teks polos tanpa penanda. Bab lama
+  berformat teks polos tetap tampil & diekspor persis seperti diketik.
+- **Tab / Shift+Tab** kini meng-indent per paragraf (dulu per baris) —
+  jaminan tidak menimpa seleksi dipertahankan.
+- Model lama "satu baris = satu paragraf, baris kosong = jeda" tetap hidup:
+  Enter = paragraf baru, paragraf kosong = jeda, tombol Jeda adegan = `* * *`
+  terpusat.
+
 ## Catatan Rilis v1.2
 
-- **Markdown dihapus total** — editor kini teks polos standar. Tidak ada lagi
-  library `marked`, tombol Bold/Italic/Heading, maupun Preview (`Ctrl+E`).
+- **Markdown dihapus total** — editor sempat menjadi teks polos standar. Tidak
+  ada lagi library `marked` maupun mode pratinjau (`Ctrl+E`).
   Isi lama yang mengandung sintaks (`**`, `#`) tetap aman: tampil apa adanya.
 - **Mode Baca** merender teks polos: judul bab + paragraf (satu baris = satu
-  paragraf, baris kosong = jeda), tanpa parsing HTML sama sekali.
+  paragraf, baris kosong = jeda).
 - **Ekspor**: opsi Markdown diganti **TXT**; PDF & DOCX memakai model paragraf
   yang sama (bab baru = halaman baru).
 - **Perbaikan**: markup modal Pengaturan yang rusak dirapikan, slider ukuran

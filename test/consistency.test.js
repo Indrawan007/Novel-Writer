@@ -57,18 +57,24 @@ test('cache Service Worker dinaikkan versinya saat strategi berubah', () => {
 });
 
 test('seluruh skrip lolos pemeriksaan sintaks Node', () => {
-  for (const f of ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/export.js', 'js/app.js', 'sw.js', 'tools/generate-icons.js']) {
+  for (const f of ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/richtext.js', 'js/export.js', 'js/app.js', 'sw.js', 'tools/generate-icons.js']) {
     execFileSync(process.execPath, ['--check', path.join(ROOT, f)], { stdio: 'pipe' });
   }
 });
 
-test('tidak ada sisa Markdown: tanpa parser, tanpa CDN marked, tanpa tombol format', () => {
-  for (const f of ['index.html', 'js/app.js', 'js/text.js', 'js/export.js', 'js/i18n.js', 'css/style.css', 'sw.js']) {
-    assert.doesNotMatch(read(f), /markdown|marked/i, `${f} masih menyebut Markdown`);
+test('editor WYSIWYG: tanpa parser sintaks, panel format = format asli (bukan penyisip penanda)', () => {
+  for (const f of ['index.html', 'js/app.js', 'js/text.js', 'js/richtext.js', 'js/export.js', 'js/i18n.js', 'css/style.css', 'sw.js']) {
+    assert.doesNotMatch(read(f), /markdown|marked/i, `${f} masih menyebut parser sintaks`);
   }
   assert.equal(fs.existsSync(path.join(ROOT, 'js/markdown.js')), false);
-  assert.doesNotMatch(html, /btn-bold|btn-italic|btn-heading|btn-preview|data-format="md"/);
   assert.doesNotMatch(read('package.json'), /"marked"/);
+  // panel format ada dan bekerja lewat model DOM (data-fmt), bukan menyisip karakter
+  assert.match(html, /id="format-bar"/, 'panel format harus ada');
+  assert.match(html, /data-fmt="bold"|data-fmt="italic"|data-fmt="heading"/);
+  assert.doesNotMatch(html, /btn-preview|data-format="md"/, 'tanpa mode pratinjau sumber');
+  assert.match(html, /contenteditable="true"/, 'permukaan editor = contenteditable');
+  const appJs = read('js/app.js');
+  assert.doesNotMatch(appJs, /'\*\*|"## "|`## /, 'app.js tidak pernah menyisipkan penanda');
 });
 
 test('generator ikon menghasilkan keluaran yang konsisten dengan PNG', () => {

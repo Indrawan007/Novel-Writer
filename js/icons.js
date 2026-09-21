@@ -32,7 +32,12 @@
     minimize: svg('<path d="M4 14h6v6M20 10h-6V4M14 14h6v6M10 4H4v6"/>'),
     bookOpen: svg('<path d="M12 6c2-1.2 3.5-1.5 6-1 1.2.2 2 1 2 3v11c0-1-.8-1.7-2-2-1.2-.3-2.5.2-4 1-1.2.6-2.4.6-4 0-1.5-.8-2.8-1.3-4-1-1.2.3-2 1-2 2V8c0-2 1-2.8 2-3 2.5-.5 4 0 6 1z"/><path d="M12 6v13"/>', 16),
     sliders:  svg('<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/>'),
-    undo:     svg('<path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7"/>', 14)
+    undo:     svg('<path d="M3 7v6h6"/><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7"/>', 14),
+    bold:     svg('<path d="M7 4.5h6a3.5 3.5 0 0 1 0 7H7z"/><path d="M7 11.5h7a3.5 3.5 0 0 1 0 7H7z"/>', 15),
+    italic:   svg('<path d="M19 4.5h-8M13 19.5H5M15.5 4.5l-5.5 15"/>', 15),
+    heading:  svg('<path d="M6 4.5v15M18 4.5v15M6 12h12"/>', 15),
+    quote:    svg('<path d="M5 5.5v13"/><path d="M10 7.5h9M10 12h9M10 16.5h6"/>', 15),
+    scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15)
   };
 
   function hydrateIcons(root) {

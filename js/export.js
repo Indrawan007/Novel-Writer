@@ -1,10 +1,13 @@
 /* ============================================
-   Export Module — TXT, PDF, DOCX (teks polos)
-   Isi bab diperlakukan apa adanya: satu baris = satu paragraf,
-   baris kosong = jeda antar-paragraf (lihat js/text.js).
+   Export Module — TXT, PDF, DOCX
+   Isi bab bisa dua format:
+   - 'html' : blok berformat (js/richtext.js) — tebal/miring/judul ikut
+     terbawa di PDF/DOCX, dan dilumat jadi teks polos di .txt
+   - 'text' : teks polos lama — satu baris = satu paragraf,
+     baris kosong = jeda antar-paragraf (lihat js/text.js).
    Catatan keamanan: semua teks pengguna masuk ke DOM lewat textContent
-   (bukan innerHTML), dan <style> ekspor di-scope ke .nw-pdf agar tidak
-   menata UI aplikasi.
+   (bukan innerHTML), node dibangun ulang dari model blok tersanitasi,
+   dan <style> ekspor di-scope ke .nw-pdf agar tidak menata UI aplikasi.
    ============================================ */
 
 const Exporter = {
@@ -13,13 +16,18 @@ const Exporter = {
   /**
    * Ambil konten yang akan diekspor.
    * scope: 'chapter' (satu bab) | 'all' (seluruh novel, urut `order`).
-   * Mengembalikan { title, author, sections: [{ heading, content }] }
+   * Mengembalikan { title, author, sections: [{ heading, content, format }] }
    * — `heading` null untuk ekspor satu bab (judulnya sudah jadi judul dokumen).
    */
   getContent(scope, projectId, chapterId) {
     const proj = Storage.getProject(projectId);
     if (!proj || !proj.chapters?.length) return null;
     const untitled = typeof t === 'function' ? t('untitled') : 'Untitled';
+    const sec = (ch) => ({
+      heading: undefined,
+      content: ch.content || '',
+      format: ch.format === 'html' ? 'html' : 'text'
+    });
 
     if (scope === 'chapter') {
       const ch = proj.chapters.find(c => c.id === chapterId);
@@ -27,7 +35,7 @@ const Exporter = {
       return {
         title: ch.title || untitled,
         author: proj.author || '',
-        sections: [{ heading: null, content: ch.content || '' }]
+        sections: [{ ...sec(ch), heading: null }]
       };
     }
 
@@ -35,7 +43,7 @@ const Exporter = {
     return {
       title: proj.title || untitled,
       author: proj.author || '',
-      sections: sorted.map(ch => ({ heading: ch.title || untitled, content: ch.content || '' }))
+      sections: sorted.map(ch => ({ ...sec(ch), heading: ch.title || untitled }))
     };
   },
 
@@ -82,7 +90,8 @@ const Exporter = {
   /**
    * Susun dokumen teks polos (fungsi murni — mudah diuji).
    * Judul & penulis di atas, tiap bab diawali judulnya, dipisah baris kosong.
-   * Isi bab ditulis persis seperti yang diketik.
+   * Isi 'text' ditulis persis seperti diketik; isi 'html' dilumat ke teks
+   * polos tanpa penanda apa pun (lihat RichText.toPlainText).
    */
   buildText(data) {
     const nl = '\n';
@@ -90,8 +99,10 @@ const Exporter = {
     if (data.author) out += data.author + nl;
     data.sections.forEach(sec => {
       out += nl + nl;
-      if (sec.heading) out += sec.heading + nl + nl;
-      out += String(sec.content || '').replace(/\r\n?/g, nl).replace(/\s+$/, '') + nl;
+      const isi = sec.format === 'html'
+        ? RichText.toPlainText(sec.content)
+        : String(sec.content || '');
+      out += isi.replace(/\r\n?/g, nl).replace(/\s+$/, '') + nl;
     });
     return out;
   },
@@ -117,7 +128,7 @@ const Exporter = {
       'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
     );
 
-    // Isi: judul bab (h1) + paragraf teks polos; semuanya lewat textContent
+    // Isi: judul bab (h1) + paragraf; node dibangun ulang dari model tersanitasi
     const body = document.createElement('div');
     data.sections.forEach(sec => {
       if (sec.heading) {
@@ -125,7 +136,8 @@ const Exporter = {
         h.textContent = sec.heading;
         body.appendChild(h);
       }
-      TextUtil.appendParagraphs(sec.content, body);
+      if (sec.format === 'html') RichText.renderInto(body, sec.content);
+      else TextUtil.appendParagraphs(sec.content, body);
     });
 
     const container = document.createElement('div');
@@ -145,9 +157,14 @@ const Exporter = {
     style.textContent = `
       .nw-pdf h1 { font-size: 18pt; margin-top: 30px; page-break-before: always; }
       .nw-pdf h1:first-of-type { page-break-before: avoid; }
+      .nw-pdf h2 { font-size: 13.5pt; margin: 18px 0 6px; page-break-after: avoid; }
       .nw-pdf p { text-indent: 1.5em; text-align: justify; margin: 0.4em 0; }
-      .nw-pdf h1 + p { text-indent: 0; }
+      .nw-pdf h1 + p, .nw-pdf h2 + p { text-indent: 0; }
       .nw-pdf p.gap { margin-top: 1.4em; }
+      .nw-pdf p.scene { text-indent: 0; text-align: center; margin: 1.2em 0; letter-spacing: 0.3em; }
+      .nw-pdf blockquote { margin: 0.6em 2em; text-indent: 0; }
+      .nw-pdf strong { font-weight: bold; }
+      .nw-pdf em { font-style: italic; }
       .nw-pdf-cover { text-align: center; font-family: sans-serif; }
       .nw-pdf-cover h1 { font-size: 24pt; margin-bottom: 6px; }
       .nw-pdf-cover p { color: #666; font-size: 11pt; margin-bottom: 40px; text-indent: 0; text-align: center; }
@@ -190,10 +207,13 @@ const Exporter = {
   /**
    * Susun daftar Paragraph docx dari konten (fungsi murni — mudah diuji).
    * `lib` = objek docx ({ Paragraph, TextRun, HeadingLevel, AlignmentType, convertInchesToTwip }).
+   * Isi 'html' memetakan model blok ke paragraf + TextRun berformat
+   * (bold/italics); isi 'text' = satu baris = satu paragraf polos.
    */
   buildDocxChildren(data, lib) {
     const { Paragraph, TextRun, HeadingLevel, AlignmentType, convertInchesToTwip } = lib;
     const children = [];
+    const run = (text, opts) => new TextRun({ text: text.replace(/\u00a0/g, ' '), font: 'Georgia', ...opts });
 
     // ---- Halaman judul ----
     children.push(
@@ -226,14 +246,45 @@ const Exporter = {
         }));
         pageBreak = false;
       }
-      TextUtil.paragraphs(sec.content).forEach(para => {
-        children.push(new Paragraph({
-          spacing: { before: para.gap ? 240 : 0, after: 80, line: 360 },
-          indent: { firstLine: convertInchesToTwip(0.5) },
-          alignment: AlignmentType.JUSTIFIED,
-          pageBreakBefore: pageBreak,
-          children: [new TextRun({ text: para.text, font: 'Georgia' })]
+      const blok = sec.format === 'html'
+        ? RichText.blocks(sec.content)
+        : TextUtil.paragraphs(sec.content).map(p => ({
+            tag: 'p', gap: !!p.gap, scene: false,
+            runs: [{ text: p.text, bold: false, italic: false }]
+          }));
+      blok.forEach(b => {
+        const text = (b.runs || []).map(r => r.text).join('');
+        const runs = (b.runs || []).map(r => run(r.text, {
+          bold: r.bold ? true : undefined,
+          italics: r.italic ? true : undefined
         }));
+        if (b.tag === 'h2') {
+          children.push(new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 360, after: 180 },
+            children: [run(text, { bold: true, size: 30 })]
+          }));
+        } else if (b.tag === 'blockquote') {
+          children.push(new Paragraph({
+            spacing: { before: 120, after: 120, line: 360 },
+            indent: { left: convertInchesToTwip(0.35) },
+            children: runs
+          }));
+        } else if (b.scene) {
+          children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 240, after: 240 },
+            children: [run(text)]
+          }));
+        } else {
+          children.push(new Paragraph({
+            spacing: { before: b.gap ? 240 : 0, after: 80, line: 360 },
+            indent: { firstLine: convertInchesToTwip(0.5) },
+            alignment: AlignmentType.JUSTIFIED,
+            pageBreakBefore: pageBreak,
+            children: runs
+          }));
+        }
         pageBreak = false;
       });
     });

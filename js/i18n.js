@@ -38,7 +38,7 @@ const I18N = {
     chapterWords:    "Kata (bab)",
     totalWords:      "Total kata",
     selectChapter:   "Pilih bab untuk mulai menulis",
-    editorPlaceholder: "Mulai menulis...\n\nSatu baris = satu paragraf. Tekan Enter untuk paragraf baru.",
+    editorPlaceholder: "Mulai menulis...\n\nTekan Enter untuk paragraf baru. Format tebal/miring/judul lewat panel di atas — tanpa menulis sintaks.",
     welcomeTitle:    "Selamat Datang di Novel Writer",
     welcomeDesc:     "Buat proyek baru untuk mulai menulis novelmu.",
     emptyPickProjTitle: "Pilih proyek",
@@ -100,6 +100,14 @@ const I18N = {
     readerHint:      "Baca dengan nyaman",
     shortcutFocus:   "Ctrl+Shift+F",
     shortcutReader:  "Ctrl+Shift+R",
+    /* Panel format (WYSIWYG) */
+    formatToolbar:   "Panel format",
+    fmtBold:         "Tebal",
+    fmtItalic:       "Miring",
+    fmtHeading:      "Subjudul",
+    fmtQuote:        "Kutipan",
+    fmtScene:        "Jeda adegan",
+    shortcutBoldItalic: "Tebal / Miring",
   },
   en: {
     appTitle:        "Novel Writer",
@@ -135,6 +143,7 @@ const I18N = {
     totalWords:      "Total words",
     selectChapter:   "Select a chapter to start writing",
     editorPlaceholder: "Start writing...\n\nOne line = one paragraph. Press Enter for a new paragraph.",
+    editorPlaceholder: "Start writing...\n\nPress Enter for a new paragraph. Use the toolbar for bold, italics, and headings — no syntax to learn.",
     welcomeTitle:    "Welcome to Novel Writer",
     welcomeDesc:     "Create a new project to start writing your novel.",
     emptyPickProjTitle: "Select a project",
@@ -196,6 +205,14 @@ const I18N = {
     readerHint:      "Comfortable reading",
     shortcutFocus:   "Ctrl+Shift+F",
     shortcutReader:  "Ctrl+Shift+R",
+    /* Format toolbar (WYSIWYG) */
+    formatToolbar:   "Format toolbar",
+    fmtBold:         "Bold",
+    fmtItalic:       "Italic",
+    fmtHeading:      "Heading",
+    fmtQuote:        "Quote",
+    fmtScene:        "Scene break",
+    shortcutBoldItalic: "Bold / Italic",
   }
 };
 
@@ -239,7 +256,9 @@ function applyLanguage(lang) {
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-    el.placeholder = t(el.dataset.i18nPlaceholder);
+    const val = t(el.dataset.i18nPlaceholder);
+    el.placeholder = val;                       // input / textarea
+    el.setAttribute('data-placeholder', val);   // contenteditable (CSS ::before)
   });
 
   // Tooltip & label aksesibilitas ikut diterjemahkan

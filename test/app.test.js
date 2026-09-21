@@ -1,7 +1,7 @@
 /* Uji perilaku aplikasi nyata di jsdom (UI, editor, keamanan, i18n, restore). */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp, wait, click, key, type, setFileInput, breakStorageSetItem } from './helpers.mjs';
+import { createApp, wait, click, key, type, select, setFileInput, breakStorageSetItem } from './helpers.mjs';
 
 const seedProject = (withChapters = true) => ({
   projects: [{
@@ -51,31 +51,37 @@ test('CRUD proyek/bab + empty-state kontekstual + auto-save', async () => {
   type(w, ed, 'satu dua tiga empat lima');
   assert.equal(chs[0].content, '', 'belum tersimpan sebelum debounce');
   await wait(1300);
-  assert.equal(S.getProject(S.getProjects()[0].id).chapters[0].content, 'satu dua tiga empat lima');
+  const tersimpan = S.getProject(S.getProjects()[0].id).chapters[0];
+  assert.equal(tersimpan.content, '<p>satu dua tiga empat lima</p>');
+  assert.equal(tersimpan.format, 'html');
   assert.equal($('#stat-chapter').textContent, '5');
   assert.deepEqual(w.__errors, []);
 });
 
-test('Tab/Shift+Tab TIDAK menimpa seleksi (regresi bug penghapus bab)', async () => {
-  const { w, $, S } = await createApp({ seed: seedProject() });
+test('Tab/Shift+Tab meng-indent per paragraf TANPA menimpa seleksi (regresi bug penghapus bab)', async () => {
+  const { w, $, nw } = await createApp({ seed: seedProject() });
   const ed = $('#editor');
-  const asli = 'baris pertama yang penting\nbaris kedua yang penting';
-  ed.focus(); ed.value = asli; ed.setSelectionRange(0, asli.length);
+  ed.focus();
+  ed.innerHTML = '<p>baris pertama yang penting</p><p>baris kedua yang penting</p>';
+  const [b1, b2] = ed.querySelectorAll('p');
+  select(w, b1.firstChild, 0, b2.firstChild, 24);
 
   key(w, ed, { key: 'Tab' });
-  assert.equal(ed.value, '  baris pertama yang penting\n  baris kedua yang penting',
-    'indent per baris, isi tidak hilang');
-  assert.ok(ed.selectionEnd > ed.selectionStart, 'seleksi dipertahankan');
+  assert.equal(ed.textContent, '\u00a0\u00a0baris pertama yang penting\u00a0\u00a0baris kedua yang penting',
+    'indent per paragraf, isi tidak hilang');
+  assert.ok(ed.textContent.includes('pertama yang penting'), 'seleksi tidak menimpa isi');
 
   key(w, ed, { key: 'Tab', shiftKey: true });
-  assert.equal(ed.value, asli, 'Shift+Tab mengembalikan semula');
+  assert.equal(ed.textContent, 'baris pertama yang pentingbaris kedua yang penting', 'Shift+Tab mengembalikan semula');
 
   // seleksi satu kata pun tidak boleh lenyap
-  ed.value = asli; ed.setSelectionRange(6, 13); // kata "pertama"
+  ed.innerHTML = '<p>baris pertama yang penting</p><p>baris kedua yang penting</p>';
+  const t1 = ed.querySelector('p').firstChild;
+  select(w, t1, 6, t1, 13); // kata "pertama"
   key(w, ed, { key: 'Tab' });
-  assert.ok(ed.value.includes('pertama'), 'kata terseleksi tetap ada');
+  assert.ok(ed.textContent.includes('pertama'), 'kata terseleksi tetap ada');
   assert.deepEqual(w.__errors, []);
-  void S;
+  void nw;
 });
 
 test('ketikan tersimpan saat tab ditutup (flush pagehide/beforeunload)', async () => {
@@ -83,8 +89,10 @@ test('ketikan tersimpan saat tab ditutup (flush pagehide/beforeunload)', async (
   const ed = $('#editor');
   type(w, ed, 'kalimat terakhir sebelum pergi');
   w.dispatchEvent(new w.Event('pagehide'));
-  assert.equal(S.getProject('p1').chapters.find(c => c.id === 'c1').content,
-    'kalimat terakhir sebelum pergi', 'tersimpan seketika, tanpa menunggu debounce');
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch.content, '<p>kalimat terakhir sebelum pergi</p>', 'tersimpan seketika, tanpa menunggu debounce');
+  assert.equal(ch.format, 'html');
+
 
   // beforeunload tidak menahan tab bila semua sudah tersimpan
   type(w, ed, 'perubahan lain');
@@ -113,25 +121,111 @@ test('Ctrl+S huruf besar (CapsLock) tetap tersimpan', async () => {
   const ed = $('#editor');
   type(w, ed, 'disimpan lewat pintasan');
   key(w, w.document, { key: 'S', ctrlKey: true });
-  assert.equal(S.getProject('p1').chapters.find(c => c.id === 'c1').content, 'disimpan lewat pintasan');
+  assert.equal(S.getProject('p1').chapters.find(c => c.id === 'c1').content,
+    '<p>disimpan lewat pintasan</p>');
   assert.match($('#toast').textContent, /Tersimpan/);
 });
 
-test('editor teks polos: tanpa tombol format/preview, Ctrl+B/I/E tidak mengubah teks', async () => {
+test('panel format WYSIWYG: format asli lewat DOM, tanpa penyisipan penanda', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
-  assert.equal($('#btn-bold'), null);
-  assert.equal($('#btn-italic'), null);
-  assert.equal($('#btn-heading'), null);
-  assert.equal($('#btn-preview'), null);
-  assert.doesNotMatch($('#editor').placeholder, /markdown|\*\*|#/i, 'placeholder tidak lagi mengajarkan sintaks');
-
   const ed = $('#editor');
-  ed.focus(); ed.value = 'kalimat biasa'; ed.setSelectionRange(0, 7);
+
+  // panel format ada, mode pratinjau sumber tidak ada
+  assert.ok($('#format-bar'), 'panel format tampil');
+  assert.ok($('#btn-bold') && $('#btn-italic') && $('#btn-heading'));
+  assert.ok($('#btn-quote') && $('#btn-scene'));
+  assert.equal($('#btn-preview'), null);
+  assert.equal($('#editor').getAttribute('contenteditable'), 'true');
+  const ph = $('#editor').getAttribute('data-placeholder') || '';
+  assert.doesNotMatch(ph, /markdown|\*\*|#/i, 'placeholder tidak mengajarkan sintaks');
+
+  // Ctrl+B / Ctrl+I memberi format DOM nyata — tidak ada karakter penanda
+  ed.focus();
+  ed.innerHTML = '<p>kalimat biasa</p>';
+  const t = ed.querySelector('p').firstChild;
+  select(w, t, 0, t, 7);
   key(w, ed, { key: 'b', ctrlKey: true });
+  assert.equal(ed.querySelector('strong')?.textContent, 'kalimat', 'Ctrl+B = <strong>');
+  assert.doesNotMatch(ed.textContent, /\*\*/, 'tanpa penanda tersisip');
+
+  select(w, ed.querySelector('strong').firstChild, 0, ed.querySelector('strong').firstChild, 7);
   key(w, ed, { key: 'i', ctrlKey: true });
-  key(w, ed, { key: 'e', ctrlKey: true });
-  assert.equal(ed.value, 'kalimat biasa', 'tidak ada penanda yang disisipkan');
-  assert.equal(ed.hidden, false, 'editor tetap tampil (tidak ada preview)');
+  assert.equal(ed.querySelector('em')?.textContent, 'kalimat', 'Ctrl+I = <em>');
+
+  // tombol subjudul mengubah jenis blok, bukan menyisip "#"
+  const t2 = [...ed.querySelector('p').childNodes]
+    .find(n => n.nodeType === 3 && n.nodeValue.includes('biasa'));
+  select(w, t2, 0, t2, 5);
+  click(w, $('#btn-heading'));
+  assert.ok(ed.querySelector('h2'), 'subjudul = <h2>');
+  assert.doesNotMatch(ed.textContent, /#/, 'tanpa penanda judul');
+
+  // tombol jeda adegan menyisip "* * *" sebagai paragraf terpusat
+  click(w, $('#btn-scene'));
+  assert.ok(ed.querySelector('p.scene'), 'jeda adegan = p.scene');
+
+  assert.equal(ed.hidden, false, 'editor tetap tampil (tanpa terpisah pratinjau)');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('penyimpanan tersanitasi: skrip & handler dari tempel/backup tidak ikut hidup', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  // simulasi tempelan kotor dari aplikasi lain
+  ed.innerHTML = '<div onclick="alert(1)">Paragraf <b>penting</b><script>alert(2)</script><img src=x onerror=alert(3)></div>';
+  ed.dispatchEvent(new w.Event('input', { bubbles: true }));
+  w.dispatchEvent(new w.Event('pagehide'));
+
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch.content, '<p>Paragraf <strong>penting</strong></p>', 'kanonik & bersih di storage');
+  assert.equal(ch.format, 'html');
+  assert.doesNotMatch(ch.content, /onclick|script|img/i);
+
+  // mode baca memakai model blok yang sama — node dibangun ulang, bukan innerHTML
+  click(w, $('#btn-reader'));
+  const rv = $('#reader-view');
+  assert.equal(rv.querySelector('strong')?.textContent, 'penting', 'format ikut tampil');
+  assert.equal(rv.querySelector('script'), null);
+  assert.equal(rv.querySelector('img'), null);
+  assert.equal(rv.querySelector('[onclick]'), null);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('isi berformat tampil utuh di Mode Baca (judul/kutipan/jeda)', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  // bab dengan format 'html' dari data (mis. hasil backup)
+  const proj = S.getProject('p1');
+  proj.chapters[0].content = '<h2>Bagian Satu</h2><p>Kata <strong>bal</strong> <em>mir</em>.</p><p class="gap">Setelah jeda.</p><p class="scene">* * *</p><blockquote>Seru bisiknya.</blockquote>';
+  proj.chapters[0].format = 'html';
+  S.saveProject(proj);
+  w.NovelWriter.renderAll();
+  click(w, $('#btn-reader'));
+
+  const rv = $('#reader-view');
+  assert.equal(rv.querySelector('h2').textContent, 'Bagian Satu');
+  assert.equal(rv.querySelector('strong').textContent, 'bal');
+  assert.equal(rv.querySelector('em').textContent, 'mir');
+  assert.ok([...rv.querySelectorAll('p')].some(p => p.classList.contains('gap')));
+  assert.ok([...rv.querySelectorAll('p')].some(p => p.classList.contains('scene')));
+  assert.equal(rv.querySelector('blockquote').textContent, 'Seru bisiknya.');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('isi teks polos lama (tanpa format) tetap tampil sebagai teks apa adanya', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  const proj = S.getProject('p1');
+  proj.chapters[0].content = 'Baris satu.\n\nBaris dua <img src=x onerror="alert(1)"> # bukan judul';
+  // tanpa properti format -> 'text' (kompatibilitas backup lama)
+  S.saveProject(proj);
+  w.NovelWriter.renderAll();
+  click(w, $('#btn-reader'));
+
+  const rv = $('#reader-view');
+  const ps = [...rv.querySelectorAll('p')];
+  assert.deepEqual(ps.map(p => p.textContent),
+    ['Baris satu.', 'Baris dua <img src=x onerror="alert(1)"> # bukan judul']);
+  assert.deepEqual(ps.map(p => p.classList.contains('gap')), [false, true], 'baris kosong -> jeda');
+  assert.equal(rv.querySelector('img'), null, 'HTML mentah tidak pernah di-parse');
   assert.deepEqual(w.__errors, []);
 });
 
@@ -143,7 +237,7 @@ test('statistik kata: teks apa adanya, tanda baca lepas tidak dihitung', async (
   assert.equal($('#stat-chapter').textContent, '7', 'tanda pisah "—" bukan kata');
 });
 
-test('mode baca: judul bab + paragraf polos; HTML mentah tampil sebagai teks', async () => {
+test('mode baca: judul bab + paragraf; HTML mentah diketik tampil sebagai teks', async () => {
   const { w, $, S } = await createApp({ seed: seedProject() });
   const ed = $('#editor');
   type(w, ed, 'Paragraf satu.\nParagraf dua.\n\nSetelah jeda <img src=x onerror="alert(1)"> # bukan judul');
@@ -158,7 +252,7 @@ test('mode baca: judul bab + paragraf polos; HTML mentah tampil sebagai teks', a
   assert.deepEqual(ps.map(p => p.textContent), ['Paragraf satu.', 'Paragraf dua.', 'Setelah jeda <img src=x onerror="alert(1)"> # bukan judul']);
   assert.deepEqual(ps.map(p => p.classList.contains('gap')), [false, false, true], 'baris kosong -> jeda');
   assert.equal(rv.querySelector('img'), null, 'HTML tidak pernah di-parse');
-  assert.equal(S.getProject('p1').chapters[0].content.startsWith('Paragraf satu.'), true, 'masuk mode baca = tersimpan');
+  assert.equal(S.getProject('p1').chapters[0].content.includes('Paragraf satu.'), true, 'masuk mode baca = tersimpan');
 
   key(w, w.document, { key: 'Escape' });
   assert.equal(rv.hidden, true);
@@ -234,7 +328,7 @@ test('tab lain menulis -> data diadopsi tanpa ping-pong, ketikan lokal aman', as
   w.dispatchEvent(new w.StorageEvent('storage', { key: 'novel-writer-data', newValue: dariTabLain }));
 
   assert.ok($('#project-list').textContent.includes('DariTabLain'), 'daftar mengikuti data baru');
-  assert.equal(ed.value, 'ketikan lokal yang belum tersimpan', 'ketikan pengguna tidak dibuang');
+  assert.equal(w.NW.RichText.getHtml(ed), '<p>ketikan lokal yang belum tersimpan</p>', 'ketikan pengguna tidak dibuang');
 });
 
 test('Esc: tutup modal dulu, baru sidebar', async () => {

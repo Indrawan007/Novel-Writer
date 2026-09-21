@@ -4,7 +4,7 @@ import path from 'node:path';
 import { JSDOM } from 'jsdom';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
-export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/export.js', 'js/app.js'];
+export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/richtext.js', 'js/export.js', 'js/app.js'];
 
 /**
  * Muat aplikasi nyata (index.html + semua skrip) ke jsdom.
@@ -24,7 +24,7 @@ export async function createApp({ seed = null } = {}) {
   const bundle = SCRIPTS
     .map((f) => `/* == ${f} == */\n` + fs.readFileSync(path.join(ROOT, f), 'utf8'))
     .join('\n;\n')
-    + '\n;window.NW = { Storage, TextUtil, Exporter, I18N, Icons, t, applyLanguage };';
+    + '\n;window.NW = { Storage, TextUtil, RichText, Exporter, I18N, Icons, t, applyLanguage };';
   w.eval(bundle);
 
   if (w.document.readyState === 'loading') {
@@ -49,10 +49,22 @@ export const click = (w, el) => el.dispatchEvent(new w.Event('click', { bubbles:
 export const key = (w, target, init) =>
   target.dispatchEvent(new w.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
 
+/** "Ketik" teks polos ke editor berformat (satu baris = satu paragraf). */
 export const type = (w, editor, text) => {
-  editor.value = text;
+  editor.innerHTML = w.NW.RichText.fromPlainText(text);
+  w.NW.RichText.syncEmpty(editor);
   editor.dispatchEvent(new w.Event('input', { bubbles: true }));
 };
+
+/** Seleksi teks di dalam elemen (untuk uji operasi format). */
+export function select(w, startNode, startOff, endNode, endOff) {
+  const r = w.document.createRange();
+  r.setStart(startNode, startOff);
+  r.setEnd(endNode, endOff);
+  const sel = w.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
 
 /** Beri nilai file pada <input type="file"> (jsdom tidak mengizinkan set langsung). */
 export function setFileInput(w, input, name, text, mime = 'application/json') {
@@ -68,14 +80,17 @@ export function setFileInput(w, input, name, text, mime = 'application/json') {
   input.dispatchEvent(new w.Event('change', { bubbles: true }));
 }
 
-/** Muat modul logika murni (storage/text/export) ke konteks Node + vm. */
+/** Muat modul logika (storage/text/richtext/export) ke konteks Node + vm. */
 export async function loadLogic() {
   const vm = await import('node:vm');
   const store = new Map();
+  const dom = new JSDOM('<body></body>');
   const sandbox = {
     console,
     crypto: globalThis.crypto,
     setTimeout, clearTimeout, setInterval, clearInterval,
+    document: dom.window.document,
+    DOMParser: dom.window.DOMParser,
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, String(v)),
@@ -85,10 +100,11 @@ export async function loadLogic() {
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  for (const f of ['js/storage.js', 'js/text.js', 'js/export.js']) {
+
+  for (const f of ['js/storage.js', 'js/text.js', 'js/richtext.js', 'js/export.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f });
   }
-  const refs = vm.runInContext('({ Storage, TextUtil, Exporter })', sandbox);
+  const refs = vm.runInContext('({ Storage, TextUtil, RichText, Exporter })', sandbox);
   return { ...refs, sandbox };
 }
 

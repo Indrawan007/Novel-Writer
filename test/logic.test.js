@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLogic } from './helpers.mjs';
 
-const { Storage, TextUtil, Exporter, sandbox } = await loadLogic();
+const { Storage, TextUtil, RichText, Exporter, sandbox } = await loadLogic();
 
 /* Objek dari konteks vm punya prototype realm lain -> normalkan lewat JSON
    sebelum deepEqual (strict membandingkan prototype). */
@@ -122,17 +122,18 @@ const seedNovel = () => {
   });
 };
 
-test('Exporter.getContent: satu bab vs seluruh novel (urut order, tanpa markup)', () => {
+test('Exporter.getContent: satu bab vs seluruh novel (urut order, format ikut terbawa)', () => {
   seedNovel();
   const one = Exporter.getContent('chapter', 'nov', 'b1');
   assert.equal(one.title, 'Bab Satu');
   assert.equal(one.author, 'Aku');
-  assert.deepEqual(plain(one.sections), [{ heading: null, content: 'Kalimat pertama.\n\nSetelah jeda.\n' }]);
+  assert.deepEqual(plain(one.sections), [{ heading: null, content: 'Kalimat pertama.\n\nSetelah jeda.\n', format: 'text' }]);
 
   const all = Exporter.getContent('all', 'nov');
   assert.equal(all.title, 'Novel Uji');
   assert.deepEqual(plain(all.sections.map((s) => s.heading)), ['Bab Satu', 'Bab Dua']);
   assert.equal(all.sections[1].content, 'Isi dua.');
+  assert.deepEqual(plain(all.sections.map((s) => s.format)), ['text', 'text']);
   assert.equal(Exporter.getContent('chapter', 'nov', 'tidak-ada'), null);
   assert.equal(Exporter.getContent('all', 'tidak-ada'), null);
 });
@@ -182,4 +183,108 @@ test('Storage.summarizeData menghitung proyek/bab/kata', () => {
     projects: [{ chapters: [{ content: 'satu dua tiga' }, { content: 'empat' }] }]
   });
   assert.equal(JSON.stringify(s), JSON.stringify({ projects: 1, chapters: 2, words: 4 }));
+});
+
+test('Storage.summarizeData: tag HTML tidak dihitung sebagai kata', () => {
+  const s = Storage.summarizeData({
+    projects: [{ chapters: [{ content: '<p><strong>satu dua</strong> tiga</p>', format: 'html' }] }]
+  });
+  assert.equal(s.words, 3);
+});
+
+/* ================= RichText (editor berformat) ================= */
+
+test('RichText.fromPlainText/toPlainText: putar-balik setia, tanpa penanda', () => {
+  const kasus = [
+    '',
+    'satu baris saja',
+    'a\nb\nc',
+    'Kalimat pertama.\n\nSetelah jeda.\n',
+    '\n\na\n\n\n\nb\n\nc\n'
+  ];
+  for (const txt of kasus) {
+    const html = RichText.fromPlainText(txt);
+    assert.doesNotMatch(html, /[<]strong|[<]em|[#*`]/, 'konversi tidak menambah format');
+    const back = RichText.toPlainText(html);
+    // putar-balik: bentuk kanonik (baris tepi dirapikan, jeda rangkap jadi satu)
+    assert.equal(back, RichText.toPlainText(RichText.fromPlainText(back)), `stabil untuk ${JSON.stringify(txt)}`);
+  }
+  assert.equal(RichText.toPlainText(RichText.fromPlainText('x\n\ny')), 'x\n\ny');
+  assert.equal(RichText.toPlainText(RichText.fromPlainText('x\ny')), 'x\ny');
+  assert.equal(RichText.fromPlainText('# bukan judul\n**bukan tebal**'),
+    '<p># bukan judul</p><p>**bukan tebal**</p>', 'penanda lama tampil sebagai teks biasa');
+});
+
+test('RichText.sanitize: allowlist ketat — script/handler/atribut berbahaya dibuang', () => {
+  assert.equal(RichText.sanitize('<p onclick="x()">Halo <strong>dunia</strong></p>'),
+    '<p>Halo <strong>dunia</strong></p>');
+  assert.equal(RichText.sanitize('<script>alert(1)</script><p>aman</p>'), '<p>aman</p>');
+  assert.equal(RichText.sanitize('<img src=x onerror=alert(1)><p>aman</p>'), '<p>aman</p>');
+  assert.equal(RichText.sanitize('<style>p{color:red}</style><p>aman</p>'), '<p>aman</p>');
+  assert.equal(RichText.sanitize('<a href="javascript:1">tautan</a>'), '<p>tautan</p>', 'tautan dilumat jadi teks');
+  assert.equal(RichText.sanitize('<div><b>bal</b> <i>mir</i><br>baris dua</div>'),
+    '<p><strong>bal</strong> <em>mir</em></p><p>baris dua</p>', 'tag dinormalkan ke model');
+  assert.equal(RichText.sanitize('<p>a</p><p> </p><p>b</p>'), '<p>a</p><p class="gap">b</p>',
+    'paragraf kosong = jeda');
+  assert.equal(RichText.sanitize('<hr>'), '<p class="scene">* * *</p>', 'garis = jeda adegan');
+  assert.equal(RichText.sanitize('<h3>Judul</h3>'), '<h2>Judul</h2>', 'judul diratakan ke satu tingkat');
+  assert.equal(RichText.sanitize('<blockquote><p>satu</p><p>dua</p></blockquote>'),
+    '<blockquote>satu</blockquote><blockquote>dua</blockquote>', 'kutipan berparagraf diratakan');
+  assert.equal(RichText.sanitize('<p>&lt;b&gt;literal&lt;/b&gt;</p>'), '<p>&lt;b&gt;literal&lt;/b&gt;</p>',
+    'tag yang diketik sebagai teks tetap teks');
+});
+
+test('RichText.toPlainText: jeda antar-blok (judul/kutipan/jeda adegan)', () => {
+  assert.equal(
+    RichText.toPlainText('<h2>Judul</h2><p>Isi.</p><p class="gap">Lagi.</p><p class="scene">* * *</p><blockquote>Kutip.</blockquote><p>Penutup.</p>'),
+    'Judul\n\nIsi.\n\nLagi.\n\n* * *\n\nKutip.\n\nPenutup.'
+  );
+  assert.equal(RichText.wordCount('<p><strong>satu</strong> dua — tiga.</p>', 'html'), 3);
+  assert.equal(RichText.wordCount('satu dua empat', 'text'), 3);
+});
+
+test('Exporter.buildText: isi html dilumat jadi teks polos', () => {
+  Storage.saveProject({
+    id: 'nov2', title: 'Dua', author: '', chapters: [
+      { id: 'h1', title: 'Bab HTML', format: 'html', content: '<p>Kalimat <strong>penting</strong>.</p><p class="gap">Setelah jeda.</p>', order: 1 },
+      { id: 't1', title: 'Bab Teks', content: 'polos saja', order: 2 }
+    ]
+  });
+  const txt = Exporter.buildText(Exporter.getContent('all', 'nov2'));
+  assert.equal(txt,
+    'Dua\n' +
+    '\n\nBab HTML\n\nKalimat penting.\n\nSetelah jeda.\n' +
+    '\n\nBab Teks\n\npolos saja\n');
+  assert.doesNotMatch(txt, /strong|class=|<>/);
+});
+
+test('Exporter.buildDocxChildren: run berformat (bold/italics) dari isi html', () => {
+  class Paragraph { constructor(o) { Object.assign(this, o); } }
+  class TextRun { constructor(o) { Object.assign(this, o); } }
+  const lib = {
+    Paragraph, TextRun,
+    HeadingLevel: { HEADING_1: 'H1', HEADING_2: 'H2' },
+    AlignmentType: { CENTER: 'center', JUSTIFIED: 'both' },
+    convertInchesToTwip: (n) => n * 1440
+  };
+  const data = {
+    title: 'X', author: '',
+    sections: [{
+      heading: null, format: 'html',
+      content: '<p>Kata <strong>bal</strong> dan <em>mir</em>.</p><h2>Sub</h2><p class="scene">* * *</p><blockquote>Kutip.</blockquote>'
+    }]
+  };
+  const kids = Exporter.buildDocxChildren(data, lib);
+  const isi = kids.find((p) => (p.children || []).some((r) => r.text === 'Kata '));
+  assert.ok(isi, 'paragraf isi ada');
+  const runs = isi.children;
+  assert.equal(runs.find((r) => r.text === 'bal').bold, true, 'bold terbawa ke docx');
+  assert.equal(runs.find((r) => r.text === 'mir').italics, true, 'italics terbawa ke docx');
+  assert.equal(runs.find((r) => r.text === 'bal').italics, undefined);
+  const sub = kids.find((p) => p.heading === 'H2');
+  assert.ok(sub, 'subjudul jadi Heading 2');
+  const scene = kids.find((p) => p.alignment === 'center' && (p.children || []).some((r) => r.text === '* * *'));
+  assert.ok(scene, 'jeda adegan rata tengah');
+  const quote = kids.find((p) => p.indent && p.indent.left > 0 && (p.children || []).some((r) => r.text === 'Kutip.'));
+  assert.ok(quote, 'kutipan menjorok masuk');
 });

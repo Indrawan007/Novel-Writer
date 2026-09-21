@@ -7,12 +7,11 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.3.0';
 
   // ============ STATE ============
   let activeProjectId = Storage.getSettings().lastProject;
   let activeChapterId = Storage.getSettings().lastChapter;
-  let isPreview = false;
   let isFocusMode = false;
   let isReaderMode = false;
   let saveTimer = null;
@@ -33,6 +32,7 @@
     chapterList:   $('#chapter-list'),
     chapterSec:    $('#chapter-section'),
     editorWrap:    $('#editor-wrap'),
+    formatBar:     $('#format-bar'),
     editor:        $('#editor'),
     reader:        $('#reader-view'),
     emptyState:    $('#empty-state'),
@@ -55,8 +55,8 @@
   // ============ HELPERS ============
 
   /** Jumlah kata (tanda baca yang berdiri sendiri tidak dihitung). */
-  function wordCount(text) {
-    return TextUtil.countWords(text);
+  function wordCount(content, format) {
+    return RichText.wordCount(content, format);
   }
 
   /** Format angka mengikuti bahasa aktif. */
@@ -285,7 +285,7 @@
 
     // MODE BACA — tampilkan bab sebagai halaman buku (judul + paragraf)
     if (isReaderMode) {
-      if (dom.editor) dom.editor.hidden = true;
+      if (dom.editor) dom.editor.hidden = true;if (dom.formatBar) dom.formatBar.hidden = true;
       if (dom.reader) dom.reader.hidden = false;
       renderReader(ch);
       try { if (dom.reader) dom.reader.scrollTop = 0; } catch {}
@@ -293,32 +293,41 @@
       return;
     }
 
-    // MODE TULIS (biasa / fokus) — textarea polos
+
+
+    // MODE TULIS (biasa / fokus) — editor teks berformat (WYSIWYG)
     if (dom.reader) dom.reader.hidden = true;
+    if (dom.formatBar) dom.formatBar.hidden = false;
     if (dom.editor) {
       dom.editor.hidden = false;
-      const keep = dirty ? dom.editor.value : null;
-      dom.editor.value = keep != null ? keep : (ch.content || '');
-      if (keep == null) {
+      const keep = dirty ? RichText.getHtml(dom.editor) : null;
+      if (keep != null) {
+        RichText.setContent(dom.editor, keep, 'html');
+      } else {
+        RichText.setContent(dom.editor, ch.content || '', ch.format);
         // Kursor di akhir konten — posisi lama milik bab sebelumnya
-        const len = dom.editor.value.length;
-        try { dom.editor.setSelectionRange(len, len); } catch {}
+        RichText.focusEnd(dom.editor);
       }
     }
+    updateToolbar();
     updateFocusReaderButtons();
   }
 
   /**
-   * Isi tampilan Mode Baca: judul bab sebagai <h1>, lalu isi bab sebagai
-   * paragraf teks polos (js/text.js — textContent, jadi bebas injeksi HTML).
+   * Isi tampilan Mode Baca: judul bab sebagai <h1>, lalu isi bab.
+   * Isi 'html' dirender dari model blok tersanitasi (js/richtext.js);
+   * isi 'text' lama = paragraf teks polos (js/text.js — textContent,
+   * jadi bebas injeksi HTML).
    */
   function renderReader(ch) {
     if (!dom.reader) return;
     dom.reader.textContent = '';
-    const h1 = document.createElement('h1');
-    h1.textContent = ch.title || t('chapter');
-    dom.reader.appendChild(h1);
-    TextUtil.appendParagraphs(ch.content || '', dom.reader);
+    if (ch.format === 'html') {
+      const frag = RichText.buildNodes(dom.reader, RichText.blocks(ch.content || ''));
+      dom.reader.appendChild(frag);
+    } else {
+      TextUtil.appendParagraphs(ch.content || '', dom.reader);
+    }
   }
 
   function updateStats() {
@@ -330,8 +339,8 @@
     }
     const chapters = proj.chapters || [];
     const ch = chapters.find(c => c.id === activeChapterId);
-    if (dom.statChapter) dom.statChapter.textContent = nf(ch ? wordCount(ch.content || '') : 0);
-    const total = chapters.reduce((s, c) => s + wordCount(c.content || ''), 0);
+    if (dom.statChapter) dom.statChapter.textContent = nf(ch ? wordCount(ch.content || '', ch.format) : 0);
+    const total = chapters.reduce((s, c) => s + wordCount(c.content || '', c.format), 0);
     if (dom.statTotal) dom.statTotal.textContent = nf(total);
   }
 
@@ -445,6 +454,7 @@
       id: Storage.uid(),
       title: title.slice(0, 300),
       content: '',
+      format: 'html',
       order: sortedChapters(proj).length + 1,
       createdAt: now,
       updatedAt: now
@@ -696,11 +706,12 @@
   // ============ EDITOR ============
   function markDirty() {
     dirty = true;
+    RichText.syncEmpty(dom.editor);
     autoSave();
   }
 
-  /**
-   * Simpan isi editor ke bab aktif.
+   /**
+   * Simpan isi editor ke bab aktif (selalu HTML kanonik tersanitasi).
    * Mengembalikan true bila tersimpan / tidak ada yang perlu disimpan.
    */
   function saveCurrentChapter(opts) {
@@ -711,9 +722,10 @@
     if (!proj) return true;
     const ch = proj.chapters?.find(c => c.id === activeChapterId);
     if (!ch) return true;
-    const newContent = dom.editor.value;
-    if (ch.content === newContent) { dirty = false; return true; }
+    const newContent = RichText.getHtml(dom.editor);
+    if (ch.format === 'html' && ch.content === newContent) { dirty = false; return true; }
     ch.content = newContent;
+    ch.format = 'html';
     ch.updatedAt = new Date().toISOString();
     const ok = Storage.saveProject(proj);
     if (ok) {
@@ -754,78 +766,49 @@
   }
 
   /**
-   * Tambah/hapus awalan di SETIAP baris yang tersentuh seleksi
-   * (dipakai tombol Heading: "## " harus di awal baris).
+   * Terapkan perintah panel format ke seleksi di editor.
+   * fmt: 'bold' | 'italic' | 'heading' | 'quote' | 'scene'
+   * (semua operasi DOM nyata — tidak ada penanda teks yang disisipkan).
    */
-  function toggleLinePrefix(prefix) {
-    const ta = dom.editor;
-    if (!ta || ta.hidden) return;
-    const value = ta.value;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    const blockStart = value.lastIndexOf('\n', start - 1) + 1;
-    const nl = value.indexOf('\n', end);
-    const blockEnd = nl === -1 ? value.length : nl;
-    const lines = value.slice(blockStart, blockEnd).split('\n');
-    const filled = lines.filter(l => l.trim().length);
-    const allHave = filled.length > 0 && filled.every(l => l.startsWith(prefix));
-    const out = lines.map(l => {
-      if (!l.trim()) return l;
-      if (allHave) return l.slice(prefix.length);
-      return prefix + l.replace(/^#{1,6}\s+/, ''); // ganti level heading lama
-    });
-    const oldBlock = lines.join('\n');
-    const newBlock = out.join('\n');
-    if (newBlock === oldBlock) { try { ta.focus(); } catch {} return; }
+  function applyFmt(fmt) {
+    const ed = dom.editor;
+    if (!ed || ed.hidden) return;
+    let ok = false;
+    if (fmt === 'bold') ok = RichText.toggleInline(ed, 'strong');
+    else if (fmt === 'italic') ok = RichText.toggleInline(ed, 'em');
+    else if (fmt === 'heading') ok = RichText.toggleBlock(ed, 'h2');
+    else if (fmt === 'quote') ok = RichText.toggleBlock(ed, 'blockquote');
+    else if (fmt === 'scene') ok = RichText.insertSceneBreak(ed);
+    if (ok) {
+      markDirty();
+      updateToolbar();
+      try { ed.focus(); } catch {}
+    }
+  }
 
-    ta.setSelectionRange(blockStart, blockEnd);
-    ta.setRangeText(newBlock, blockStart, blockEnd, 'end');
-    const firstDelta = out[0].length - lines[0].length;
-    const totalDelta = newBlock.length - oldBlock.length;
-    const newStart = Math.max(blockStart, start + firstDelta);
-    try { ta.setSelectionRange(newStart, Math.max(newStart, end + totalDelta)); } catch {}
-    try { ta.focus(); } catch {}
-    markDirty();
+  /** Sinkronkan tombol panel format (aria-pressed) dengan posisi kursor. */
+  function updateToolbar() {
+    if (!dom.formatBar || !dom.editor || dom.editor.hidden) return;
+    const st = RichText.queryState(dom.editor);
+    const press = (id, on) => {
+      const b = $(id);
+      if (b) b.setAttribute('aria-pressed', String(!!on));
+    };
+    press('#btn-bold', st.bold);
+    press('#btn-italic', st.italic);
+    press('#btn-heading', st.heading);
+    press('#btn-quote', st.quote);
   }
 
   /**
-   * Tab / Shift+Tab = indent & un-indent PER BARIS pada seluruh seleksi.
+   * Tab / Shift+Tab = indent & un-indent tiap paragraf tersentuh seleksi.
    * Seleksi TIDAK PERNAH ditimpa (bug lama: seluruh bab bisa lenyap).
    */
   function handleTab(e) {
-    const ta = dom.editor;
-    if (!ta) return;
+    const ed = dom.editor;
+    if (!ed) return;
     e.preventDefault();
-    const INDENT = '  ';
-    const value = ta.value;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-
-    // Caret tunggal + Tab = sisip indent di posisi caret
-    if (start === end && !e.shiftKey) {
-      ta.setRangeText(INDENT, start, end, 'end');
-      markDirty();
-      return;
-    }
-
-    const blockStart = value.lastIndexOf('\n', start - 1) + 1;
-    const nl = value.indexOf('\n', end);
-    const blockEnd = nl === -1 ? value.length : nl;
-    const lines = value.slice(blockStart, blockEnd).split('\n');
-
-    const out = e.shiftKey
-      ? lines.map(l => l.startsWith(INDENT) ? l.slice(INDENT.length) : l.replace(/^(\t| {1,2})/, ''))
-      : lines.map(l => l.length ? INDENT + l : l);
-
-    const oldBlock = lines.join('\n');
-    const newBlock = out.join('\n');
-    if (newBlock === oldBlock) return; // mis. Shift+Tab di baris tanpa indent
-
-    ta.setSelectionRange(blockStart, blockEnd);
-    ta.setRangeText(newBlock, blockStart, blockEnd, 'end');
-    const firstDelta = out[0].length - lines[0].length;
-    const totalDelta = newBlock.length - oldBlock.length;
-    const newStart = Math.max(blockStart, start + firstDelta);
-    try { ta.setSelectionRange(newStart, Math.max(newStart, end + totalDelta)); } catch {}
-    markDirty();
+    if (RichText.indent(ed, e.shiftKey ? -1 : 1)) markDirty();
   }
 
   // ============ MODE FOKUS & MODE BACA ============
@@ -1116,10 +1099,10 @@
      ping-pong), dan pertahankan ketikan yang belum tersimpan di editor. */
   function onExternalStorage(e) {
     if (e.key !== DB_KEY) return;
-    const keep = (dirty && dom.editor && !dom.editor.hidden) ? dom.editor.value : null;
+    const keep = (dirty && dom.editor && !dom.editor.hidden) ? RichText.getHtml(dom.editor) : null;
     afterDataReplaced();
     if (keep != null && dom.editor) {
-      dom.editor.value = keep;
+      RichText.setContent(dom.editor, keep, 'html');
       dirty = true;
       autoSave();
     }
@@ -1182,8 +1165,25 @@
 
     dom.editor?.addEventListener('input', markDirty);
     dom.editor?.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') handleTab(e);
+      if (e.key === 'Tab') { handleTab(e); return; }
+      // Ctrl/Cmd+B, I = tebal / miring (format asli, tanpa penanda)
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.altKey && !e.shiftKey) {
+        const k = typeof e.key === 'string' ? e.key.toLowerCase() : '';
+        if (k === 'b') { e.preventDefault(); applyFmt('bold'); return; }
+        if (k === 'i') { e.preventDefault(); applyFmt('italic'); }
+      }
     });
+
+    // Panel format: mousedown disimpan agar seleksi di editor tidak hilang
+    if (dom.formatBar) {
+      dom.formatBar.addEventListener('mousedown', (e) => { e.preventDefault(); });
+      dom.formatBar.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-fmt]');
+        if (btn) applyFmt(btn.dataset.fmt);
+      });
+    }
+    document.addEventListener('selectionchange', updateToolbar);
 
     dom.btnFocus?.addEventListener('click', toggleFocusMode);
     dom.btnReader?.addEventListener('click', toggleReaderMode);
@@ -1370,6 +1370,11 @@
 
   // ============ INIT ============
   function init() {
+    // Enter = paragraf baru <p> di browser yang mendukung (hasil tetap
+    // dinormalisasi ke model blok saat disimpan)
+    try {
+      if (document.execCommand) document.execCommand('defaultParagraphSeparator', false, 'p');
+    } catch {}
     const s = Storage.getSettings();
     Storage.repairPointers();
     activeProjectId = s.lastProject;

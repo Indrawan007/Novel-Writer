@@ -143,8 +143,26 @@
       <!-- Editor -->
       <div id="editor-wrap" hidden>
         <label for="editor" class="sr-only" id="editor-label" data-i18n="editorLabel">Editor bab</label>
-        <textarea id="editor" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" placeholder="Mulai menulis..."></textarea>
-        <!-- Tampilan Mode Baca: teks polos dirender sebagai paragraf (js/text.js) -->
+        <!-- Panel format WYSIWYG: tanpa sintaks — yang diklik, itulah formatnya -->
+        <div id="format-bar" role="toolbar" aria-orientation="horizontal" data-i18n-aria="formatToolbar" aria-label="Panel format">
+          <button type="button" class="fmt-btn" id="btn-bold" data-fmt="bold" data-i18n-title="fmtBold" data-i18n-aria="fmtBold" title="Tebal" aria-label="Tebal" aria-pressed="false">
+            <span class="icon" data-icon="bold" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="fmt-btn" id="btn-italic" data-fmt="italic" data-i18n-title="fmtItalic" data-i18n-aria="fmtItalic" title="Miring" aria-label="Miring" aria-pressed="false">
+            <span class="icon" data-icon="italic" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="fmt-btn" id="btn-heading" data-fmt="heading" data-i18n-title="fmtHeading" data-i18n-aria="fmtHeading" title="Subjudul" aria-label="Subjudul" aria-pressed="false">
+            <span class="icon" data-icon="heading" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="fmt-btn" id="btn-quote" data-fmt="quote" data-i18n-title="fmtQuote" data-i18n-aria="fmtQuote" title="Kutipan" aria-label="Kutipan" aria-pressed="false">
+            <span class="icon" data-icon="quote" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="fmt-btn" id="btn-scene" data-fmt="scene" data-i18n-title="fmtScene" data-i18n-aria="fmtScene" title="Jeda adegan" aria-label="Jeda adegan">
+            <span class="icon" data-icon="scene" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div id="editor" class="prose" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" data-empty="true"></div>
+        <!-- Tampilan Mode Baca: bab dirender sebagai halaman buku (js/richtext.js) -->
         <div id="reader-view" class="prose" hidden tabindex="0" role="document" aria-live="off" data-i18n-aria="readerMode" aria-label="Mode Baca"></div>
       </div>
 
@@ -324,6 +342,7 @@
         <label data-i18n="shortcuts">Pintasan Keyboard</label>
         <div class="shortcuts-grid">
           <div><kbd>Ctrl</kbd> + <kbd>S</kbd> <span data-i18n="shortcutSave">Simpan</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>B</kbd>/<kbd>I</kbd> <span data-i18n="shortcutBoldItalic">Tebal / Miring</span></div>
           <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> <span data-i18n="focusMode">Mode Fokus</span></div>
           <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> <span data-i18n="readerMode">Mode Baca</span></div>
           <div><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span data-i18n="shortcutIndent">Indent</span></div>
@@ -355,6 +374,7 @@
     <script src="js/storage.js"></script>
     <script src="js/icons.js"></script>
     <script src="js/text.js"></script>
+    <script src="js/richtext.js"></script>
     <script src="js/export.js"></script>
     <script src="js/app.js"></script>
   </body>
