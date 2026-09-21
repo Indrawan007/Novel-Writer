@@ -142,6 +142,25 @@ Workflow `.github/workflows/deploy.yml` berjalan saat push ke `main`:
 generate ikon → susun folder rilis → upload & deploy ke Pages.
 Aktifkan sekali di repo: **Settings → Pages → Source: GitHub Actions**.
 
+## Deploy ke Vercel
+
+Repo ini siap deploy apa adanya (situs statis + `vercel.json`):
+
+1. Buka [vercel.com/new](https://vercel.com/new), login dengan GitHub, lalu **Import** repo ini.
+2. Biarkan semua default (Framework Preset: **Other** — Build Command `npm run icons`
+   sudah diatur di `vercel.json` untuk men-generate ikon PWA yang tidak di-commit).
+3. Klik **Deploy** — setiap push ke `main` otomatis jadi production, branch lain jadi preview.
+
+Atau via CLI:
+
+```bash
+npm i -g vercel
+vercel         # preview
+vercel --prod  # production
+```
+
+Vercel otomatis menyediakan HTTPS, jadi Service Worker & install PWA langsung aktif.
+
 ## Dependensi
 
 Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhkan:
