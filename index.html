@@ -32,10 +32,6 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="css/style.css" />
-    <script
-      src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"
-      defer
-    ></script>
   </head>
   <body>
     <div id="app">
@@ -120,37 +116,6 @@
             >Pilih bab untuk mulai menulis</span
           >
           <div class="toolbar-right">
-            <button
-              id="btn-bold"
-              class="icon-btn fmt-btn"
-              title="Bold (Ctrl+B)"
-              aria-label="Bold"
-              hidden
-            >
-              <b>B</b>
-            </button>
-            <button
-              id="btn-italic"
-              class="icon-btn fmt-btn"
-              title="Italic (Ctrl+I)"
-              aria-label="Italic"
-              hidden
-            >
-              <i>I</i>
-            </button>
-            <button
-              id="btn-heading"
-              class="icon-btn fmt-btn"
-              title="Heading"
-              aria-label="Heading"
-              hidden
-            >
-              H
-            </button>
-            <span class="toolbar-divider" id="fmt-divider" hidden></span>
-            <button id="btn-preview" class="icon-btn" title="Preview (Ctrl+E)" aria-label="Preview" aria-pressed="false" hidden>
-            <span class="icon" data-icon="eye" aria-hidden="true"></span>
-          </button>
           <button id="btn-focus" class="icon-btn" data-i18n-title="focusMode" data-i18n-aria="focusMode" title="Mode Fokus" aria-label="Mode Fokus" hidden>
             <span class="icon" data-icon="maximize" aria-hidden="true"></span>
           </button>
@@ -179,7 +144,8 @@
       <div id="editor-wrap" hidden>
         <label for="editor" class="sr-only" id="editor-label" data-i18n="editorLabel">Editor bab</label>
         <textarea id="editor" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" placeholder="Mulai menulis..."></textarea>
-        <div id="preview" class="prose" hidden tabindex="0" role="document" aria-live="off"></div>
+        <!-- Tampilan Mode Baca: teks polos dirender sebagai paragraf (js/text.js) -->
+        <div id="reader-view" class="prose" hidden tabindex="0" role="document" aria-live="off" data-i18n-aria="readerMode" aria-label="Mode Baca"></div>
       </div>
 
       <!-- Empty State (teks & aksi diisi dinamis oleh app.js sesuai kondisi) -->
@@ -281,11 +247,11 @@
         <label class="radio-label"><input type="radio" name="exp-scope" value="all"> <span data-i18n="entireNovel">Seluruh novel</span></label>
       </div>
         <div class="export-formats">
-          <button class="btn-export-opt" data-format="md">
-            <span class="ext-badge">MD</span>
+          <button class="btn-export-opt" data-format="txt">
+            <span class="ext-badge">TXT</span>
             <div class="ext-text">
-              <strong>Markdown</strong>
-              <span>(.md)</span>
+              <strong data-i18n="plainText">Teks Biasa</strong>
+              <span>(.txt)</span>
             </div>
           </button>
           <button class="btn-export-opt" data-format="pdf">
@@ -315,46 +281,61 @@
       <div class="form-group">
         <label for="set-lang" data-i18n="language">Bahasa</label>
         <select id="set-lang">
-            <option value="id">Indonesia</option>
-            <option value="en">English</option>
-          </select>
-        </div>
+          <option value="id">Indonesia</option>
+          <option value="en">English</option>
+        </select>
+      </div>
 
-          <label data-i18n="backupRestore">Cadangan &amp; Pulihkan</label>
-          <div class="backup-btns">
-            <button class="btn-ghost" id="btn-backup">
-              <span class="icon" data-icon="download" aria-hidden="true"></span>
-              <span data-i18n="backupData">Cadangkan</span>
-            </button>
-            <button class="btn-ghost" id="btn-restore">
-              <span class="icon" data-icon="upload" aria-hidden="true"></span>
-              <span data-i18n="restoreData">Pulihkan</span>
-            </button>
+      <div class="form-group">
+        <label for="set-fontsize"><span data-i18n="fontSize">Ukuran Font</span> <output id="fontsize-val" for="set-fontsize">18px</output></label>
+        <input type="range" id="set-fontsize" class="custom-range" min="14" max="28" step="1" value="18">
+      </div>
+
+      <div class="form-group">
+        <label for="set-lineheight"><span data-i18n="lineHeight">Tinggi Baris</span> <output id="lineheight-val" for="set-lineheight">1.8</output></label>
+        <input type="range" id="set-lineheight" class="custom-range" min="1.4" max="2.2" step="0.1" value="1.8">
+      </div>
+
+      <div class="form-group">
+        <label for="set-autosave"><span data-i18n="autoSave">Auto-save</span> <output id="autosave-val" for="set-autosave">1.0s</output></label>
+        <input type="range" id="set-autosave" class="custom-range" min="500" max="5000" step="500" value="1000">
+      </div>
+
+      <div class="form-group">
+        <label data-i18n="backupRestore">Cadangan &amp; Pulihkan</label>
+        <div class="backup-btns">
+          <button class="btn-ghost" id="btn-backup">
+            <span class="icon" data-icon="download" aria-hidden="true"></span>
+            <span data-i18n="backupData">Cadangkan</span>
+          </button>
+          <button class="btn-ghost" id="btn-restore">
+            <span class="icon" data-icon="upload" aria-hidden="true"></span>
+            <span data-i18n="restoreData">Pulihkan</span>
+          </button>
           <button class="btn-ghost" id="btn-undo-restore" hidden>
             <span class="icon" data-icon="undo" aria-hidden="true"></span>
             <span data-i18n="undoRestore">Batalkan restore terakhir</span>
           </button>
           <input type="file" id="inp-restore" accept=".json,application/json" hidden>
         </div>
-        </div>
+      </div>
 
-        <div class="form-group">
-          <label data-i18n="shortcuts">Pintasan Keyboard</label>
-          <div class="shortcuts-grid">
+      <div class="form-group">
+        <label data-i18n="shortcuts">Pintasan Keyboard</label>
+        <div class="shortcuts-grid">
           <div><kbd>Ctrl</kbd> + <kbd>S</kbd> <span data-i18n="shortcutSave">Simpan</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>B</kbd> <span data-i18n="bold">Tebal</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>I</kbd> <span data-i18n="italic">Miring</span></div>
-          <div><kbd>Ctrl</kbd> + <kbd>E</kbd> <span data-i18n="shortcutPreview">Preview</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F</kbd> <span data-i18n="focusMode">Mode Fokus</span></div>
+          <div><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd> <span data-i18n="readerMode">Mode Baca</span></div>
           <div><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> <span data-i18n="shortcutIndent">Indent</span></div>
           <div><kbd>Alt</kbd> + <kbd>↑</kbd>/<kbd>↓</kbd> <span data-i18n="shortcutReorder">Urutkan bab</span></div>
           <div><kbd>Esc</kbd> <span data-i18n="shortcutClose">Tutup modal</span></div>
         </div>
       </div>
 
-        <div class="modal-actions">
-          <button class="btn-ghost" data-close data-i18n="close">Tutup</button>
-        </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="close">Tutup</button>
       </div>
+    </div>
 
       <!-- Confirm -->
     <div id="modal-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-confirm-title" hidden>
@@ -373,7 +354,7 @@
     <script src="js/i18n.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/icons.js"></script>
-    <script src="js/markdown.js"></script>
+    <script src="js/text.js"></script>
     <script src="js/export.js"></script>
     <script src="js/app.js"></script>
   </body>

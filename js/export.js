@@ -1,8 +1,10 @@
 /* ============================================
-   Export Module — MD, PDF, DOCX
-   Catatan keamanan: semua konten pengguna melewati Markdown.parse()
-   (HTML mentah di-escape) + Markdown.sanitizeLinks() sebelum masuk DOM,
-   dan <style> ekspor di-scope ke .nw-pdf agar tidak menata UI aplikasi.
+   Export Module — TXT, PDF, DOCX (teks polos)
+   Isi bab diperlakukan apa adanya: satu baris = satu paragraf,
+   baris kosong = jeda antar-paragraf (lihat js/text.js).
+   Catatan keamanan: semua teks pengguna masuk ke DOM lewat textContent
+   (bukan innerHTML), dan <style> ekspor di-scope ke .nw-pdf agar tidak
+   menata UI aplikasi.
    ============================================ */
 
 const Exporter = {
@@ -11,29 +13,29 @@ const Exporter = {
   /**
    * Ambil konten yang akan diekspor.
    * scope: 'chapter' (satu bab) | 'all' (seluruh novel, urut `order`).
+   * Mengembalikan { title, author, sections: [{ heading, content }] }
+   * — `heading` null untuk ekspor satu bab (judulnya sudah jadi judul dokumen).
    */
   getContent(scope, projectId, chapterId) {
     const proj = Storage.getProject(projectId);
     if (!proj || !proj.chapters?.length) return null;
+    const untitled = typeof t === 'function' ? t('untitled') : 'Untitled';
 
     if (scope === 'chapter') {
       const ch = proj.chapters.find(c => c.id === chapterId);
       if (!ch) return null;
       return {
-        title: ch.title || (typeof t === 'function' ? t('untitled') : 'Untitled'),
-        content: ch.content || '',
-        author: proj.author
+        title: ch.title || untitled,
+        author: proj.author || '',
+        sections: [{ heading: null, content: ch.content || '' }]
       };
     }
 
     const sorted = [...proj.chapters].sort((a, b) => a.order - b.order);
-    const full = sorted
-      .map(ch => `# ${ch.title || ''}\n\n${ch.content || ''}`)
-      .join('\n\n---\n\n');
     return {
-      title: proj.title || (typeof t === 'function' ? t('untitled') : 'Untitled'),
-      content: full,
-      author: proj.author
+      title: proj.title || untitled,
+      author: proj.author || '',
+      sections: sorted.map(ch => ({ heading: ch.title || untitled, content: ch.content || '' }))
     };
   },
 
@@ -75,18 +77,35 @@ const Exporter = {
     return this._libPromises[globalName];
   },
 
-  /** Ekspor Markdown (.md) */
-  toMarkdown(scope, projectId, chapterId) {
+  /* ---- TXT ---- */
+
+  /**
+   * Susun dokumen teks polos (fungsi murni — mudah diuji).
+   * Judul & penulis di atas, tiap bab diawali judulnya, dipisah baris kosong.
+   * Isi bab ditulis persis seperti yang diketik.
+   */
+  buildText(data) {
+    const nl = '\n';
+    let out = data.title + nl;
+    if (data.author) out += data.author + nl;
+    data.sections.forEach(sec => {
+      out += nl + nl;
+      if (sec.heading) out += sec.heading + nl + nl;
+      out += String(sec.content || '').replace(/\r\n?/g, nl).replace(/\s+$/, '') + nl;
+    });
+    return out;
+  },
+
+  /** Ekspor teks polos (.txt) */
+  toText(scope, projectId, chapterId) {
     const data = this.getContent(scope, projectId, chapterId);
     if (!data) return false;
-
-    const header = `# ${data.title}\n${data.author ? `**${data.author}**\n` : ''}\n---\n\n`;
-    const blob = new Blob([header + data.content], {
-      type: 'text/markdown;charset=utf-8'
-    });
-    this.download(blob, `${this.sanitize(data.title)}.md`);
+    const blob = new Blob([this.buildText(data)], { type: 'text/plain;charset=utf-8' });
+    this.download(blob, `${this.sanitize(data.title)}.txt`);
     return true;
   },
+
+  /* ---- PDF ---- */
 
   /** Ekspor PDF (lazy-load html2pdf.js) */
   async toPDF(scope, projectId, chapterId) {
@@ -98,9 +117,16 @@ const Exporter = {
       'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
     );
 
-    // Konten dirender lewat jalur Markdown yang aman (escape + sanitasi)
+    // Isi: judul bab (h1) + paragraf teks polos; semuanya lewat textContent
     const body = document.createElement('div');
-    Markdown.render(data.content, body);
+    data.sections.forEach(sec => {
+      if (sec.heading) {
+        const h = document.createElement('h1');
+        h.textContent = sec.heading;
+        body.appendChild(h);
+      }
+      TextUtil.appendParagraphs(sec.content, body);
+    });
 
     const container = document.createElement('div');
     container.className = 'nw-pdf';
@@ -114,18 +140,14 @@ const Exporter = {
       width: 700px;
     `;
 
-    // Gaya di-SCOPE ke .nw-pdf: tidak lagi menata UI aplikasi selama ekspor
+    // Gaya di-SCOPE ke .nw-pdf: tidak menata UI aplikasi selama ekspor
     const style = document.createElement('style');
     style.textContent = `
       .nw-pdf h1 { font-size: 18pt; margin-top: 30px; page-break-before: always; }
       .nw-pdf h1:first-of-type { page-break-before: avoid; }
-      .nw-pdf h2 { font-size: 14pt; margin-top: 20px; }
       .nw-pdf p { text-indent: 1.5em; text-align: justify; margin: 0.4em 0; }
-      .nw-pdf hr { border: none; border-top: 1px solid #ccc; margin: 2em 0; }
-      .nw-pdf strong { font-weight: 700; }
-      .nw-pdf em { font-style: italic; }
-      .nw-pdf blockquote { margin: 1em 0 1em 1.2em; font-style: italic; color: #555; }
-      .nw-pdf ul, .nw-pdf ol { margin: 0.6em 0 0.6em 1.4em; }
+      .nw-pdf h1 + p { text-indent: 0; }
+      .nw-pdf p.gap { margin-top: 1.4em; }
       .nw-pdf-cover { text-align: center; font-family: sans-serif; }
       .nw-pdf-cover h1 { font-size: 24pt; margin-bottom: 6px; }
       .nw-pdf-cover p { color: #666; font-size: 11pt; margin-bottom: 40px; text-indent: 0; text-align: center; }
@@ -163,18 +185,14 @@ const Exporter = {
     }
   },
 
-  /** Ekspor DOCX (lazy-load docx.js) */
-  async toDocx(scope, projectId, chapterId) {
-    const data = this.getContent(scope, projectId, chapterId);
-    if (!data) return false;
+  /* ---- DOCX ---- */
 
-    await this.ensureLib('docx', 'https://unpkg.com/docx@8.5.0/build/index.umd.js');
-
-    const {
-      Document, Paragraph, TextRun, HeadingLevel,
-      Packer, AlignmentType, convertInchesToTwip
-    } = docx;
-
+  /**
+   * Susun daftar Paragraph docx dari konten (fungsi murni — mudah diuji).
+   * `lib` = objek docx ({ Paragraph, TextRun, HeadingLevel, AlignmentType, convertInchesToTwip }).
+   */
+  buildDocxChildren(data, lib) {
+    const { Paragraph, TextRun, HeadingLevel, AlignmentType, convertInchesToTwip } = lib;
     const children = [];
 
     // ---- Halaman judul ----
@@ -195,122 +213,43 @@ const Exporter = {
         })
       );
     }
-    children.push(
-      new Paragraph({
-        children: [new TextRun({ break: 1 })],
-        pageBreakBefore: true
-      })
-    );
 
-    // ---- Isi ----
-    const lines = data.content.split('\n');
-    let inFence = false;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      // Blok kode (``` ... ```) -> paragraf monospace apa adanya
-      if (/^```/.test(trimmed)) {
-        inFence = !inFence;
-        continue;
-      }
-      if (inFence) {
-        children.push(new Paragraph({
-          spacing: { after: 0 },
-          indent: { left: convertInchesToTwip(0.3) },
-          children: [new TextRun({ text: line.replace(/\t/g, '  '), font: 'Consolas', size: 20 })]
-        }));
-        continue;
-      }
-
-      if (!trimmed) {
-        children.push(new Paragraph({ spacing: { after: 100 } }));
-        continue;
-      }
-
-      if (trimmed.startsWith('# ')) {
+    // ---- Isi: paragraf pertama setelah halaman judul selalu di halaman baru ----
+    let pageBreak = true;
+    data.sections.forEach(sec => {
+      if (sec.heading) {
         children.push(new Paragraph({
           heading: HeadingLevel.HEADING_1,
           spacing: { before: 480, after: 240 },
           pageBreakBefore: true,
-          children: this.parseInlineDocx(trimmed.slice(2), { bold: true, size: 36 })
+          children: [new TextRun({ text: sec.heading, bold: true, size: 36, font: 'Georgia' })]
         }));
-        continue;
+        pageBreak = false;
       }
-
-      if (trimmed.startsWith('## ')) {
+      TextUtil.paragraphs(sec.content).forEach(para => {
         children.push(new Paragraph({
-          heading: HeadingLevel.HEADING_2,
-          spacing: { before: 360, after: 180 },
-          children: this.parseInlineDocx(trimmed.slice(3), { bold: true, size: 28 })
+          spacing: { before: para.gap ? 240 : 0, after: 80, line: 360 },
+          indent: { firstLine: convertInchesToTwip(0.5) },
+          alignment: AlignmentType.JUSTIFIED,
+          pageBreakBefore: pageBreak,
+          children: [new TextRun({ text: para.text, font: 'Georgia' })]
         }));
-        continue;
-      }
+        pageBreak = false;
+      });
+    });
 
-      if (/^###\s+/.test(trimmed)) {
-        children.push(new Paragraph({
-          heading: HeadingLevel.HEADING_3,
-          spacing: { before: 300, after: 150 },
-          children: this.parseInlineDocx(trimmed.replace(/^###\s+/, ''), { bold: true, size: 24 })
-        }));
-        continue;
-      }
+    return children;
+  },
 
-      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-          children.push(new Paragraph({
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 240, after: 240 },
-          children: [new TextRun({ text: '• • •', color: '999999', size: 24 })]
-        }));
-        continue;
-      }
+  /** Ekspor DOCX (lazy-load docx.js) */
+  async toDocx(scope, projectId, chapterId) {
+    const data = this.getContent(scope, projectId, chapterId);
+    if (!data) return false;
 
-      // Kutipan (blockquote)
-      if (trimmed.startsWith('> ')) {
-        children.push(new Paragraph({
-          spacing: { before: 120, after: 120 },
-          indent: { left: convertInchesToTwip(0.4) },
-          children: this.parseInlineDocx(trimmed.slice(2), { italics: true, color: '555555' })
-        }));
-        continue;
-      }
+    await this.ensureLib('docx', 'https://unpkg.com/docx@8.5.0/build/index.umd.js');
 
-      // Daftar tak berurut
-      const bullet = trimmed.match(/^[-*+]\s+(.*)$/);
-      if (bullet) {
-        children.push(new Paragraph({
-          spacing: { after: 60 },
-          indent: { left: convertInchesToTwip(0.4), hanging: convertInchesToTwip(0.2) },
-          children: [
-            new TextRun({ text: '•\t', font: 'Georgia' }),
-            ...this.parseInlineDocx(bullet[1])
-          ]
-        }));
-        continue;
-      }
-
-      // Daftar berurut (penanda angka dipertahankan sebagai teks)
-      const ordered = trimmed.match(/^(\d+[.)])\s+(.*)$/);
-      if (ordered) {
-        children.push(new Paragraph({
-          spacing: { after: 60 },
-          indent: { left: convertInchesToTwip(0.4), hanging: convertInchesToTwip(0.25) },
-          children: [
-            new TextRun({ text: ordered[1] + '\t', font: 'Georgia' }),
-            ...this.parseInlineDocx(ordered[2])
-          ]
-        }));
-        continue;
-      }
-
-      // Paragraf biasa
-      children.push(new Paragraph({
-        spacing: { after: 80, line: 360 },
-        indent: { firstLine: convertInchesToTwip(0.5) },
-        alignment: AlignmentType.JUSTIFIED,
-        children: this.parseInlineDocx(trimmed)
-      }));
-    }
+    const { Document, Packer, convertInchesToTwip } = docx;
+    const children = this.buildDocxChildren(data, docx);
 
     const doc = new Document({
       styles: {
@@ -343,40 +282,6 @@ const Exporter = {
   /* ---- Helpers ---- */
 
   /**
-   * Tokenizer inline Markdown -> TextRun[] (bold, italic, strike, code, link, gambar).
-   * `base` = gaya dasar yang diwarisi setiap run (mis. untuk heading/blockquote).
-   */
-  parseInlineDocx(text, base) {
-    const { TextRun } = docx;
-    const b = base || {};
-    const mk = (txt, extra) => new TextRun({ text: txt, font: 'Georgia', ...b, ...(extra || {}) });
-    const runs = [];
-    const re = /!\[(?<imgAlt>[^\]]*)\]\((?<imgUrl>[^)]*)\)|\[(?<linkText>[^\]]*)\]\((?<linkUrl>[^)]*)\)|(?<boldM>\*\*|__)(?<boldText>[\s\S]+?)\k<boldM>|(?<emM>\*|_)(?<emText>[^\s*_][\s\S]*?)\k<emM>|~~(?<strike>[\s\S]+?)~~|`(?<code>[^`]+)`/g;
-
-    let last = 0, m;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) runs.push(mk(text.slice(last, m.index)));
-      const g = m.groups;
-      if (g.imgAlt !== undefined) {
-        runs.push(mk(g.imgAlt || '', { italics: true, color: '888888' }));
-      } else if (g.linkText !== undefined) {
-        runs.push(mk(g.linkText, { color: '8A3B2E', underline: {} }));
-      } else if (g.boldText !== undefined) {
-        runs.push(mk(g.boldText, { bold: true }));
-      } else if (g.emText !== undefined) {
-        runs.push(mk(g.emText, { italics: true }));
-      } else if (g.strike !== undefined) {
-        runs.push(mk(g.strike, { strike: true }));
-      } else if (g.code !== undefined) {
-        runs.push(mk(g.code, { font: 'Consolas' }));
-      }
-      last = re.lastIndex;
-    }
-    if (last < text.length) runs.push(mk(text.slice(last)));
-    return runs.length ? runs : [mk(text || '')];
-  },
-
-  /**
    * Nama file aman: karakter ilegal (termasuk karakter kontrol) diganti "_",
    * spasi dirapikan, panjang dibatasi agar tidak ditolak sistem file.
    */
@@ -402,4 +307,3 @@ const Exporter = {
     });
   }
 };
-

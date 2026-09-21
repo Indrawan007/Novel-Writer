@@ -117,34 +117,53 @@ test('Ctrl+S huruf besar (CapsLock) tetap tersimpan', async () => {
   assert.match($('#toast').textContent, /Tersimpan/);
 });
 
-test('tombol Heading bekerja di awal baris & bisa di-toggle', async () => {
+test('editor teks polos: tanpa tombol format/preview, Ctrl+B/I/E tidak mengubah teks', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
+  assert.equal($('#btn-bold'), null);
+  assert.equal($('#btn-italic'), null);
+  assert.equal($('#btn-heading'), null);
+  assert.equal($('#btn-preview'), null);
+  assert.doesNotMatch($('#editor').placeholder, /markdown|\*\*|#/i, 'placeholder tidak lagi mengajarkan sintaks');
+
   const ed = $('#editor');
-  ed.value = 'satu dua tiga'; ed.setSelectionRange(5, 5);
-  click(w, $('#btn-heading'));
-  assert.equal(ed.value, '## satu dua tiga', 'prefix di awal baris, bukan di tengah kalimat');
-  click(w, $('#btn-heading'));
-  assert.equal(ed.value, 'satu dua tiga', 'toggle melepas prefix');
+  ed.focus(); ed.value = 'kalimat biasa'; ed.setSelectionRange(0, 7);
+  key(w, ed, { key: 'b', ctrlKey: true });
+  key(w, ed, { key: 'i', ctrlKey: true });
+  key(w, ed, { key: 'e', ctrlKey: true });
+  assert.equal(ed.value, 'kalimat biasa', 'tidak ada penanda yang disisipkan');
+  assert.equal(ed.hidden, false, 'editor tetap tampil (tidak ada preview)');
+  assert.deepEqual(w.__errors, []);
 });
 
-test('statistik kata mengabaikan sintaks Markdown', async () => {
+test('statistik kata: teks apa adanya, tanda baca lepas tidak dihitung', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
   const ed = $('#editor');
-  type(w, ed, '# Judul\n\n**tebal** dan ![gambar](x.png) serta `kode`');
+  type(w, ed, 'Ia menoleh — lalu berkata, "Cukup."\n\nDua paragraf.');
   await wait(1300);
-  assert.equal($('#stat-chapter').textContent, '6');
+  assert.equal($('#stat-chapter').textContent, '7', 'tanda pisah "—" bukan kata');
 });
 
-test('preview aman: HTML mentah di-escape, tautan berbahaya diblokir', async () => {
-  const { w, $ } = await createApp({ seed: seedProject() });
+test('mode baca: judul bab + paragraf polos; HTML mentah tampil sebagai teks', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
   const ed = $('#editor');
-  ed.value = 'x <img src=x onerror="alert(1)"> [k](javascript:alert(1)) <a href="vbscript:x">v</a>';
-  click(w, $('#btn-preview'));
-  const pv = $('#preview');
-  assert.equal(pv.querySelector('img'), null);
-  assert.equal([...pv.querySelectorAll('a')].every(a => !a.getAttribute('href')), true);
-  assert.equal([...pv.querySelectorAll('*')].every(el => ![...el.attributes].some(a => /^on/i.test(a.name))), true);
-  assert.equal($('#btn-preview').getAttribute('aria-pressed'), 'true');
+  type(w, ed, 'Paragraf satu.\nParagraf dua.\n\nSetelah jeda <img src=x onerror="alert(1)"> # bukan judul');
+  click(w, $('#btn-reader'));
+
+  const rv = $('#reader-view');
+  assert.equal(rv.hidden, false);
+  assert.equal(ed.hidden, true);
+  assert.equal(w.document.documentElement.classList.contains('reader-mode'), true);
+  assert.equal(rv.querySelector('h1').textContent, 'Bab 1', 'judul bab dari data, bukan dari sintaks');
+  const ps = [...rv.querySelectorAll('p')];
+  assert.deepEqual(ps.map(p => p.textContent), ['Paragraf satu.', 'Paragraf dua.', 'Setelah jeda <img src=x onerror="alert(1)"> # bukan judul']);
+  assert.deepEqual(ps.map(p => p.classList.contains('gap')), [false, false, true], 'baris kosong -> jeda');
+  assert.equal(rv.querySelector('img'), null, 'HTML tidak pernah di-parse');
+  assert.equal(S.getProject('p1').chapters[0].content.startsWith('Paragraf satu.'), true, 'masuk mode baca = tersimpan');
+
+  key(w, w.document, { key: 'Escape' });
+  assert.equal(rv.hidden, true);
+  assert.equal(ed.hidden, false, 'Esc kembali ke editor');
+  assert.deepEqual(w.__errors, []);
 });
 
 test('i18n: tooltip, aria-label, judul modal, dan empty-state ikut bahasa', async () => {
@@ -156,7 +175,8 @@ test('i18n: tooltip, aria-label, judul modal, dan empty-state ikut bahasa', asyn
 
   assert.equal($('#btn-new-project').title, 'New Project');
   assert.equal($('#btn-settings').title, 'Settings');
-  assert.equal($('#btn-bold').title, 'Bold (Ctrl+B)');
+  assert.equal($('#btn-export').title, 'Export');
+  assert.equal($('#btn-focus').title, 'Focus Mode (Ctrl+Shift+F)');
   assert.equal($('#btn-theme').getAttribute('aria-label'), 'Switch to dark theme');
   assert.equal($('#empty-title').textContent, 'No chapters yet');
 
@@ -217,7 +237,7 @@ test('tab lain menulis -> data diadopsi tanpa ping-pong, ketikan lokal aman', as
   assert.equal(ed.value, 'ketikan lokal yang belum tersimpan', 'ketikan pengguna tidak dibuang');
 });
 
-test('Esc: tutup modal dulu, baru sidebar, baru preview', async () => {
+test('Esc: tutup modal dulu, baru sidebar', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
   click(w, $('#btn-settings'));
   assert.equal($('#modal-settings').hidden, false);

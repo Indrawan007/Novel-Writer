@@ -1,26 +1,28 @@
 # Novel Writer
 
-Aplikasi web minimalis untuk menulis novel — _distraction-free_, **offline-first (PWA)**, tanpa backend.
-Seluruh data tersimpan di `localStorage` browser.
+Aplikasi web minimalis untuk menulis novel — **teks polos** (tanpa Markdown), _distraction-free_,
+**offline-first (PWA)**, tanpa backend. Seluruh data tersimpan di `localStorage` browser.
 
 ## Fitur
 
 - Manajemen **proyek & bab** (buat, ganti nama, hapus)
 - Urutkan bab dengan **drag & drop** (mouse), **tahan-lalu-geser** (layar sentuh),
   atau **Alt + ↑/↓** (keyboard)
-- Editor **Markdown** dengan preview (`Ctrl+E`), bold/italic/heading per baris
+- Editor **teks polos** — apa yang diketik, itulah yang tersimpan; tanpa sintaks apa pun.
+  Satu baris = satu paragraf; baris kosong = jeda (mis. ganti adegan)
+- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — bab tampil seperti halaman buku
 - **Auto-save** (interval 0,5–5 detik, bisa diatur) + **flush otomatis saat tab ditutup**
-- Statistik kata yang **mengabaikan sintaks Markdown**
-- Ekspor **Markdown / PDF / DOCX** — per bab atau seluruh novel
+- Statistik kata (tanda baca yang berdiri sendiri tidak dihitung)
+- Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel
 - **Cadangkan & pulihkan** data: konfirmasi ber-ringkasan sebelum menimpa,
   snapshot otomatis, dan **undo restore** dari Pengaturan
 - **Sinkronisasi antar-tab** (tab lain menulis → data diadopsi, ketikan lokal tidak dibuang)
 - Tema gelap/terang, ukuran font & tinggi baris bisa diatur
 - Bilingual: **Indonesia / English** (termasuk tooltip & label aksesibilitas)
-- **Aman**: HTML mentah di-escape & tautan `javascript:` diblokir di semua jalur
-  (preview **dan** ekspor PDF); id dari file backup divalidasi
+- **Aman**: isi bab tidak pernah di-parse sebagai HTML — Mode Baca & ekspor PDF memakai
+  `textContent`; id dari file backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 36 kasus (Node + jsdom) + CI
+- **Test suite** 39 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -49,12 +51,12 @@ python3 -m http.server 8000
 | Tombol | Fungsi |
 |---|---|
 | `Ctrl+S` | Simpan sekarang |
-| `Ctrl+B` / `Ctrl+I` | Bold / Italic (toggle; tanpa seleksi caret ditaruh di tengah) |
-| `Ctrl+E` | Preview Markdown |
+| `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle) |
+| `Ctrl+Shift+R` / `F10` | Mode Baca (toggle) |
 | `Tab` / `Shift+Tab` | Indent / un-indent **per baris** pada seluruh seleksi |
 | `Alt+↑` / `Alt+↓` | Pindahkan bab (saat fokus di daftar bab) |
 | `Enter` / `Spasi` | Buka proyek/bab (saat fokus di daftar) |
-| `Esc` | Tutup modal → sidebar → preview (berurutan) |
+| `Esc` | Tutup modal → keluar Mode Fokus/Baca → tutup sidebar (berurutan) |
 
 ## Struktur Proyek
 
@@ -64,8 +66,8 @@ css/style.css         Tema editorial light/dark (CSS variables), layout, respons
 js/storage.js         Lapisan data (cache in-memory + localStorage, key: novel-writer-data)
 js/i18n.js            Terjemahan ID/EN (teks, placeholder, title, aria-label)
 js/icons.js           Ikon SVG stroke inline (tanpa emoji)
-js/markdown.js        Render Markdown aman + hitung kata + teks polos
-js/export.js          Modul ekspor (Markdown / PDF / DOCX)
+js/text.js            Utilitas teks polos: pecah paragraf, render aman, hitung kata
+js/export.js          Modul ekspor (TXT / PDF / DOCX)
 js/app.js             Inti aplikasi (state, render, CRUD, editor, DnD, PWA)
 sw.js                 Service Worker (navigasi network-first, aset SWR)
 manifest.json         Manifest PWA
@@ -79,13 +81,14 @@ test/                 Test suite (Node + jsdom)
 ## Pengujian
 
 ```bash
-npm install     # dependensi pengujian saja (jsdom, marked)
-npm test        # 36 kasus: logika, perilaku UI, keamanan, konsistensi
+npm install     # dependensi pengujian saja (jsdom)
+npm test        # 39 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, regresi "Tab menghapus seleksi", flush saat unload,
-kuota penuh, keamanan preview/restore, i18n, fokus modal, urutan bab (keyboard
-& drag), sinkronisasi antar-tab, serta konsistensi markup↔kamus↔ikon↔SW↔manifest.
+kuota penuh, Mode Baca & keamanan restore, ekspor teks polos, i18n, fokus modal,
+urutan bab (keyboard & drag), sinkronisasi antar-tab, konsistensi
+markup↔kamus↔ikon↔SW↔manifest, serta jaminan **tidak ada sisa Markdown**.
 
 ## Regenerasi Ikon
 
@@ -107,17 +110,29 @@ Aktifkan sekali di repo: **Settings → Pages → Source: GitHub Actions**.
 
 Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhkan:
 
-- [marked](https://marked.js.org/) — parsing Markdown
 - [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) — ekspor PDF (lazy-load)
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
-Dev-dependencies (hanya untuk pengujian): `jsdom`, `marked`.
+Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.2
+
+- **Markdown dihapus total** — editor kini teks polos standar. Tidak ada lagi
+  library `marked`, tombol Bold/Italic/Heading, maupun Preview (`Ctrl+E`).
+  Isi lama yang mengandung sintaks (`**`, `#`) tetap aman: tampil apa adanya.
+- **Mode Baca** merender teks polos: judul bab + paragraf (satu baris = satu
+  paragraf, baris kosong = jeda), tanpa parsing HTML sama sekali.
+- **Ekspor**: opsi Markdown diganti **TXT**; PDF & DOCX memakai model paragraf
+  yang sama (bab baru = halaman baru).
+- **Perbaikan**: markup modal Pengaturan yang rusak dirapikan, slider ukuran
+  font / tinggi baris / auto-save dikembalikan, ikon `sliders` & `undo` yang
+  hilang ditambahkan, Service Worker kini mem-precache semua skrip aplikasi.
 
 ## Catatan Rilis v1.1
 
 - **Perbaikan kehilangan data**: Tab tidak lagi menimpa seleksi; isi editor di-flush
   saat tab ditutup/bersembunyi; kegagalan tulis (kuota) dilaporkan, bukan ditelan.
-- **Keamanan**: ekspor PDF memakai jalur Markdown yang aman; `<style>` ekspor
+- **Keamanan**: ekspor PDF memakai jalur render yang aman; `<style>` ekspor
   di-scope; id dari backup divalidasi + di-escape di semua interpolasi atribut.
 - **UX**: empty-state kontekstual, undo restore, konfirmasi restore ber-ringkasan,
   i18n penuh (tooltip/aria/judul modal), fokus terperangkap di modal,
