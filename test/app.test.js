@@ -402,3 +402,286 @@ test('drag & drop mouse memindahkan bab', async () => {
   const order = [...S.getProject('p1').chapters].sort((a, b) => a.order - b.order).map(c => c.id);
   assert.equal(order.join(','), 'c3,c1,c2');
 });
+
+/* ============ MODE IMERSIF: MODE FOKUS & MODE BACA ============ */
+
+const rootEl = (w) => w.document.documentElement;
+const movePointer = (w, clientY) =>
+  w.document.dispatchEvent(new w.MouseEvent('mousemove', { bubbles: true, clientY }));
+
+test('mode fokus: chrome hilang total, HUD imersif membawa hitungan kata', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  type(w, ed, 'tiga kata dulu');
+  click(w, $('#btn-focus'));
+
+  const root = rootEl(w);
+  assert.equal(root.classList.contains('focus-mode'), true);
+  assert.equal(root.classList.contains('immersive'), true, 'satu kelas bersama: semua chrome disembunyikan');
+
+  const hud = $('#immersive-hud');
+  assert.equal(hud.hidden, false, 'HUD tersedia selama mode imersif');
+  assert.equal(hud.classList.contains('is-visible'), true, 'HUD menyala sebentar saat masuk');
+  assert.equal($('#hud-info').textContent, '3 kata');
+  assert.equal($('#hud-switch').getAttribute('aria-label'), w.NW.t('toReaderMode'));
+  assert.ok($('#hud-exit').getAttribute('aria-label').match(/Keluar Mode Fokus/i));
+
+  // hitungan kata mengikuti ketikan tanpa menunggu auto-save
+  type(w, ed, 'tiga kata dulu lalu bertambah dua');
+  assert.equal($('#hud-info').textContent, '6 kata');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode fokus: keluar lewat HUD, lewat Esc, dan saat layar penuh ditutup browser', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const root = rootEl(w);
+
+  click(w, $('#btn-focus'));
+  assert.equal(root.classList.contains('immersive'), true);
+  click(w, $('#hud-exit'));
+  assert.equal(root.classList.contains('focus-mode'), false);
+  assert.equal(root.classList.contains('immersive'), false);
+  assert.equal($('#immersive-hud').hidden, true, 'HUD ikut hilang setelah keluar');
+  assert.equal($('#immersive-hud').classList.contains('is-visible'), false);
+
+  click(w, $('#btn-focus'));
+  key(w, w.document, { key: 'Escape' });
+  assert.equal(root.classList.contains('focus-mode'), false, 'Esc keluar dari layar penuh');
+
+  // Layar penuh ditutup dari luar (Esc native browser / tombol OS)
+  click(w, $('#btn-focus'));
+  assert.equal(root.classList.contains('focus-mode'), true);
+  w.document.dispatchEvent(new w.Event('fullscreenchange'));
+  assert.equal(root.classList.contains('focus-mode'), false, 'keluar layar penuh = keluar Mode Fokus');
+  assert.equal(root.classList.contains('immersive'), false);
+  assert.equal($('#immersive-hud').hidden, true);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('layar penuh browser diminta saat masuk, tidak diobrak-abrik saat pindah mode', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const root = rootEl(w);
+  const calls = [];
+  root.requestFullscreen = () => { calls.push('enter'); return Promise.resolve(); };
+  w.document.exitFullscreen = () => { calls.push('exit'); return Promise.resolve(); };
+
+  click(w, $('#btn-focus'));
+  await wait(20);
+  assert.deepEqual(calls, ['enter'], 'masuk Mode Fokus = minta layar penuh');
+  assert.equal(w.NovelWriter.state.fullscreenRequested, true);
+
+  // Fokus -> Baca lewat HUD: tetap satu sesi layar penuh (tanpa kedip)
+  click(w, $('#hud-switch'));
+  await wait(20);
+  assert.deepEqual(calls, ['enter'], 'pindah mode tidak keluar-masuk layar penuh');
+  assert.equal(root.classList.contains('reader-mode'), true);
+  assert.equal(root.classList.contains('focus-mode'), false);
+  assert.equal(root.classList.contains('immersive'), true);
+
+  key(w, w.document, { key: 'Escape' });
+  await wait(20);
+  assert.deepEqual(calls, ['enter', 'exit'], 'keluar mode = lepas layar penuh');
+  assert.equal(w.NovelWriter.state.fullscreenRequested, false);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('tanpa Fullscreen API / ditolak browser: mode imersif tetap jalan penuh', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const root = rootEl(w);
+  root.requestFullscreen = () => Promise.reject(new Error('NotAllowedError'));
+  click(w, $('#btn-focus'));
+  await wait(20);
+  assert.equal(root.classList.contains('immersive'), true, 'CSS layar penuh tetap dipakai');
+  assert.equal($('#immersive-hud').hidden, false);
+  assert.match($('#toast').textContent, /layar penuh/i, 'penolakan browser diberitahukan');
+  assert.equal(w.NovelWriter.state.fullscreenRequested, false);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('HUD hanya muncul saat diminta lalu memudar; kursor mouse ikut menganggur', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-focus'));
+  const hud = $('#immersive-hud');
+  const root = rootEl(w);
+  assert.equal(hud.classList.contains('is-visible'), true);
+
+  await wait(2500);                       // melewati masa pudar HUD + kursor
+  assert.equal(hud.classList.contains('is-visible'), false, 'HUD memudar sendiri');
+  assert.equal(root.classList.contains('cursor-idle'), true, 'kursor disembunyikan saat menganggur');
+
+  movePointer(w, 400);                    // gerakan di area tulis
+  assert.equal(root.classList.contains('cursor-idle'), false, 'kursor kembali begitu pointer bergerak');
+  assert.equal(hud.classList.contains('is-visible'), false, 'gerakan di teks tidak memunculkan HUD');
+
+  movePointer(w, 12);                     // menyentuh tepi atas layar
+  assert.equal(hud.classList.contains('is-visible'), true, 'tepi atas = panggil HUD');
+});
+
+test('mode baca: halaman buku lengkap, pindah bab tidak meninggalkan mode', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  const proj = S.getProject('p1');
+  proj.chapters[0].content = '<p>Paragraf pertama bab satu.</p>';
+  proj.chapters[0].format = 'html';
+  proj.chapters[1].content = '<p>Isi bab dua.</p>';
+  proj.chapters[1].format = 'html';
+  S.saveProject(proj);
+  w.NovelWriter.renderAll();
+
+  click(w, $('#btn-reader'));
+  await wait(40);
+  const root = rootEl(w);
+  const rv = $('#reader-view');
+  assert.equal(root.classList.contains('reader-mode'), true);
+  assert.equal(root.classList.contains('immersive'), true);
+  assert.equal(rv.querySelector('h1.reader-title').textContent, 'Bab 1', 'judul bab jadi judul halaman');
+  assert.equal(rv.querySelector('p').textContent, 'Paragraf pertama bab satu.');
+  assert.equal($('#hud-info').textContent, 'Bab 1 · 100%');
+  assert.equal($('#hud-progress-fill').style.width, '100%', 'bab lebih pendek dari layar = terbaca semua');
+  assert.equal($('#hud-prev').disabled, true, 'bab pertama: "sebelumnya" nonaktif');
+  assert.equal($('#hud-next').disabled, false);
+  assert.equal($('#hud-switch').getAttribute('aria-label'), w.NW.t('toFocusMode'));
+
+  click(w, $('#hud-next'));
+  await wait(40);
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2');
+  assert.equal(root.classList.contains('reader-mode'), true, 'pindah bab tetap di Mode Baca');
+  assert.equal(rv.querySelector('h1.reader-title').textContent, 'Bab 2');
+  assert.equal(rv.querySelector('p').textContent, 'Isi bab dua.');
+
+  key(w, w.document, { key: 'ArrowLeft' });
+  await wait(40);
+  assert.equal(rv.querySelector('h1.reader-title').textContent, 'Bab 1', 'panah kiri = bab sebelumnya');
+
+  // Ujung daftar bab: diberi tahu, tidak error, tidak melompat
+  key(w, w.document, { key: 'ArrowRight' });
+  key(w, w.document, { key: 'ArrowRight' });
+  await wait(40);
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c3');
+  assert.equal($('#hud-next').disabled, true);
+  key(w, w.document, { key: 'ArrowRight' });
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c3', 'tidak melampaui bab terakhir');
+  assert.match($('#toast').textContent, /bab terakhir/i);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode baca: keyboard di dalam HUD tidak dibajak kendali baca (pola toolbar)', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-reader'));
+  await wait(40);
+  $('#hud-next').focus();
+  key(w, w.document, { key: ' ' });            // Space di atas tombol = klik tombol itu
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c1', 'Space tidak dipakai membalik halaman');
+  key(w, w.document, { key: 'ArrowRight' });
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c1', 'panah di dalam HUD = pindah tombol');
+  assert.equal(w.document.activeElement.id, 'hud-font-down', 'fokus berpindah ke tombol berikutnya');
+
+  // Fokus kembali ke halaman: panah & Space jadi kendali baca
+  $('#reader-view').focus();
+  key(w, w.document, { key: 'ArrowRight' });
+  await wait(40);
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2', 'panah di halaman = bab berikutnya');
+});
+
+test('ukuran huruf bisa diubah dari HUD Mode Baca dan tersimpan', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-reader'));
+  assert.equal($('#hud-font-up').disabled, false);
+  click(w, $('#hud-font-up'));
+  click(w, $('#hud-font-up'));
+  assert.equal(S.getSettings().fontSize, 20);
+  assert.equal(rootEl(w).style.getPropertyValue('--editor-size'), '20px');
+  click(w, $('#hud-font-down'));
+  assert.equal(S.getSettings().fontSize, 19);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('pengaturan mode imersif tersimpan & langsung berlaku', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-settings'));
+  const fs = $('#set-fullscreen'), tw = $('#set-typewriter');
+  assert.equal(fs.checked, true, 'layar penuh otomatis aktif secara bawaan');
+  assert.equal(tw.checked, false);
+  fs.checked = false; fs.dispatchEvent(new w.Event('change', { bubbles: true }));
+  tw.checked = true;  tw.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.equal(S.getSettings().immersiveFullscreen, false);
+  assert.equal(S.getSettings().focusTypewriter, true);
+  click(w, $('#modal-settings [data-close]'));
+
+  const calls = [];
+  rootEl(w).requestFullscreen = () => { calls.push('enter'); return Promise.resolve(); };
+  click(w, $('#btn-focus'));
+  await wait(20);
+  assert.deepEqual(calls, [], 'layar penuh tidak diminta bila pengaturan mati');
+  assert.equal(rootEl(w).classList.contains('focus-mode'), true, 'mode tetap jalan tanpa layar penuh browser');
+  assert.equal(rootEl(w).classList.contains('typewriter'), true, 'typewriter aktif bersama Mode Fokus');
+
+  // typewriter hanya milik Mode Fokus
+  click(w, $('#hud-switch'));
+  await wait(20);
+  assert.equal(rootEl(w).classList.contains('typewriter'), false);
+  assert.equal(rootEl(w).classList.contains('reader-mode'), true);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode imersif otomatis dilepas bila bab/proyek hilang (data tab lain)', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-focus'));
+  assert.equal(rootEl(w).classList.contains('immersive'), true);
+
+  // tab lain menghapus bab yang sedang dibuka
+  const proj = S.getProject('p1');
+  proj.chapters = proj.chapters.filter(c => c.id !== 'c1');
+  S.saveProject(proj);
+  S.saveSettings({ lastChapter: null });
+  w.dispatchEvent(Object.assign(new w.Event('storage'), { key: 'novel-writer-data' }));
+  await wait(30);
+
+  assert.equal(rootEl(w).classList.contains('focus-mode'), false);
+  assert.equal(rootEl(w).classList.contains('immersive'), false);
+  assert.equal($('#immersive-hud').hidden, true);
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode baca: pindah bab tidak pernah menimpa isi bab lain (regresi kehilangan data)', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  const proj = S.getProject('p1');
+  proj.chapters.forEach((c, i) => { c.content = `<p>Isi bab ${['satu', 'dua', 'tiga'][i]}.</p>`; c.format = 'html'; });
+  S.saveProject(proj);
+  w.NovelWriter.renderAll();
+
+  click(w, $('#btn-reader'));
+  await wait(30);
+  key(w, w.document, { key: 'ArrowRight' });   // -> Bab 2
+  key(w, w.document, { key: 'ArrowRight' });   // -> Bab 3
+  await wait(30);
+  assert.equal($('#reader-view').querySelector('h1.reader-title').textContent, 'Bab 3');
+
+  // flush saat tab ditutup tidak boleh menulis isi editor yang basi
+  w.dispatchEvent(new w.Event('pagehide'));
+  let chs = S.getProject('p1').chapters;
+  assert.deepEqual([...chs.map(c => c.content)],
+    ['<p>Isi bab satu.</p>', '<p>Isi bab dua.</p>', '<p>Isi bab tiga.</p>'], 'semua bab utuh');
+
+  // kembali menulis: editor memuat bab yang sedang dibuka, bukan bab pertama
+  click(w, $('#hud-switch'));
+  await wait(30);
+  assert.equal($('#editor').textContent.trim(), 'Isi bab tiga.');
+  assert.equal(rootEl(w).classList.contains('focus-mode'), true);
+  chs = S.getProject('p1').chapters;
+  assert.deepEqual([...chs.map(c => c.content)],
+    ['<p>Isi bab satu.</p>', '<p>Isi bab dua.</p>', '<p>Isi bab tiga.</p>'], 'tetap utuh setelah keluar');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('masuk mode imersif menutup modal yang terbuka (tidak ada yang tertinggal di layar)', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-settings'));
+  assert.equal($('#modal-overlay').hidden, false);
+  key(w, w.document, { key: 'F10' });           // Mode Baca dari keyboard
+  await wait(30);
+  assert.equal($('#modal-overlay').hidden, true, 'modal tertutup');
+  assert.equal(w.document.body.classList.contains('modal-open'), false);
+  assert.equal(rootEl(w).classList.contains('immersive'), true);
+  assert.equal($('#immersive-hud').hidden, false);
+  assert.deepEqual(w.__errors, []);
+});

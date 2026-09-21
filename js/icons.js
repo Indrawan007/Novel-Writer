@@ -37,7 +37,11 @@
     italic:   svg('<path d="M19 4.5h-8M13 19.5H5M15.5 4.5l-5.5 15"/>', 15),
     heading:  svg('<path d="M6 4.5v15M18 4.5v15M6 12h12"/>', 15),
     quote:    svg('<path d="M5 5.5v13"/><path d="M10 7.5h9M10 12h9M10 16.5h6"/>', 15),
-    scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15)
+    scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15),
+    /* HUD imersif (Mode Fokus / Mode Baca) */
+    chevronLeft:  svg('<path d="M14.5 5.5L8 12l6.5 6.5"/>', 15),
+    chevronRight: svg('<path d="M9.5 5.5L16 12l-6.5 6.5"/>', 15),
+    write:        svg('<path d="M12 20.5h8.5"/><path d="M16.9 3.6a2 2 0 0 1 2.8 2.8L8 18.1l-4 1.2 1.2-4z"/>', 15)
   };
 
   function hydrateIcons(root) {

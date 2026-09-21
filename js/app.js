@@ -7,17 +7,28 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
 
   // ============ STATE ============
-  let activeProjectId = Storage.getSettings().lastProject;
-  let activeChapterId = Storage.getSettings().lastChapter;
+  const initSettings = Storage.getSettings();
+  let activeProjectId = initSettings.lastProject;
+  let activeChapterId = initSettings.lastChapter;
   let isFocusMode = false;
   let isReaderMode = false;
+  let immersiveFullscreen = initSettings.immersiveFullscreen !== false; // layar penuh browser
+  let typewriterOn = initSettings.focusTypewriter === true;             // kursor dijaga di tengah
+  let fsRequested = false;   // layar penuh diminta OLEH aplikasi (bukan pengguna)
+  let fsFailNotified = false;// penolakan layar penuh cukup diberitahu sekali
+  let hudTimer = null;       // pemudar otomatis HUD
+  let cursorTimer = null;    // penyembunyi kursor mouse saat menganggur
+  let typewriterRaf = 0;
+  let readerRaf = 0;
+  let readerPosTimer = null;
+  let readerPct = 0;         // progres baca bab aktif (0-100)
   let saveTimer = null;
   let confirmCallback = null;
   let renameTarget = null;
-  let autoSaveDelay = Storage.getSettings().autoSaveDelay || 1000;
+  let autoSaveDelay = initSettings.autoSaveDelay || 1000;
   let lastFocused = null;   // elemen pemanggil modal (fokus dikembalikan saat tutup)
   let dirty = false;        // ada ketikan yang belum tersimpan
 
@@ -50,6 +61,17 @@
     btnFocus:      $('#btn-focus'),
     btnReader:     $('#btn-reader'),
     btnTheme:      $('#btn-theme'),
+    /* HUD imersif — satu-satunya kontrol di Mode Fokus / Mode Baca */
+    hud:           $('#immersive-hud'),
+    hudInfo:       $('#hud-info'),
+    hudPrev:       $('#hud-prev'),
+    hudNext:       $('#hud-next'),
+    hudFontDown:   $('#hud-font-down'),
+    hudFontUp:     $('#hud-font-up'),
+    hudTheme:      $('#hud-theme'),
+    hudSwitch:     $('#hud-switch'),
+    hudExit:       $('#hud-exit'),
+    hudProgress:   $('#hud-progress-fill'),
   };
 
   // ============ HELPERS ============
@@ -285,15 +307,23 @@
 
     // MODE BACA — tampilkan bab sebagai halaman buku (judul + paragraf)
     if (isReaderMode) {
-      if (dom.editor) dom.editor.hidden = true;if (dom.formatBar) dom.formatBar.hidden = true;
+      if (dom.editor) dom.editor.hidden = true;
+      if (dom.formatBar) dom.formatBar.hidden = true;
       if (dom.reader) dom.reader.hidden = false;
       renderReader(ch);
-      try { if (dom.reader) dom.reader.scrollTop = 0; } catch {}
+      // Gulung ke atas dulu, lalu pulihkan posisi baca terakhir bab ini
+      try {
+        if (dom.editorWrap) dom.editorWrap.scrollTop = 0;
+        if (dom.reader) dom.reader.scrollTop = 0;
+      } catch {}
+      readerPct = 0;
+      updateHud();
+      // Posisi baca disimpan sebagai rasio — butuh layout, jadi tunda satu frame
+      raf(() => restoreReaderPosition(activeChapterId));
+      raf(() => { try { if (dom.reader) dom.reader.focus({ preventScroll: true }); } catch {} });
       updateFocusReaderButtons();
       return;
     }
-
-
 
     // MODE TULIS (biasa / fokus) — editor teks berformat (WYSIWYG)
     if (dom.reader) dom.reader.hidden = true;
@@ -310,6 +340,7 @@
       }
     }
     updateToolbar();
+    updateHud();
     updateFocusReaderButtons();
   }
 
@@ -322,11 +353,17 @@
   function renderReader(ch) {
     if (!dom.reader) return;
     dom.reader.textContent = '';
-    if (ch.format === 'html') {
+    const doc = dom.reader.ownerDocument || document;
+    // Judul bab: textContent = tidak pernah di-parse sebagai HTML
+    const h1 = doc.createElement('h1');
+    h1.className = 'reader-title';
+    h1.textContent = (ch && ch.title) || t('chapter');
+    dom.reader.appendChild(h1);
+    if (ch && ch.format === 'html') {
       const frag = RichText.buildNodes(dom.reader, RichText.blocks(ch.content || ''));
       dom.reader.appendChild(frag);
     } else {
-      TextUtil.appendParagraphs(ch.content || '', dom.reader);
+      TextUtil.appendParagraphs((ch && ch.content) || '', dom.reader);
     }
   }
 
@@ -342,6 +379,7 @@
     if (dom.statChapter) dom.statChapter.textContent = nf(ch ? wordCount(ch.content || '', ch.format) : 0);
     const total = chapters.reduce((s, c) => s + wordCount(c.content || '', c.format), 0);
     if (dom.statTotal) dom.statTotal.textContent = nf(total);
+    updateHudInfo();
   }
 
   function renderAll() {
@@ -363,6 +401,7 @@
     }
     applySidebarLabels();
     updateFocusReaderButtons();
+    updateHud();
   }
 
   // ============ PROJECT CRUD ============
@@ -489,12 +528,18 @@
   function selectChapter(id) {
     if (id === activeChapterId) { closeSidebar(); return; }
     saveCurrentChapter({ silent: true });
+    saveReaderPosition();          // ingat posisi baca bab yang ditinggalkan
     activeChapterId = id;
     dirty = false;
     persist(Storage.saveSettings({ lastChapter: id }));
     renderChapters();
     renderEditor();
     closeSidebar();
+    if (isReaderMode) {
+      // tetap di halaman buku: tampilkan judul bab baru di HUD sebentar
+      setHudVisible(true);
+      return;
+    }
     setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 50);
   }
 
@@ -707,6 +752,8 @@
   function markDirty() {
     dirty = true;
     RichText.syncEmpty(dom.editor);
+    updateHudInfo();        // hitungan kata di HUD ikut tiap ketikan
+    scheduleTypewriter();   // Mode Fokus: jaga baris aktif di tengah
     autoSave();
   }
 
@@ -718,6 +765,10 @@
     const o = opts || {};
     clearTimeout(saveTimer);
     if (!activeChapterId || !activeProjectId || !dom.editor) return true;
+    /* Mode Baca: editor tersembunyi dan masih memuat bab yang DIBUKA SEBELUMNYA
+       (pindah bab di Mode Baca tidak menyentuh editor). Menulis isi DOM editor
+       ke bab aktif akan menimpa bab yang salah -> sumber kebenaran = storage. */
+    if (isReaderMode || dom.editor.hidden) { dirty = false; return true; }
     const proj = Storage.getProject(activeProjectId);
     if (!proj) return true;
     const ch = proj.chapters?.find(c => c.id === activeChapterId);
@@ -811,7 +862,432 @@
     if (RichText.indent(ed, e.shiftKey ? -1 : 1)) markDirty();
   }
 
-  // ============ MODE FOKUS & MODE BACA ============
+  // ============ MODE IMERSIF: MODE FOKUS & MODE BACA ============
+  /* Layar penuh tanpa gangguan sama sekali:
+     1. Seluruh chrome (sidebar, toolbar, panel format, statistik,
+        scrollbar) dihapus dari layar oleh CSS `html.immersive` — bukan
+        digeser, jadi tidak menyisakan ruang layout.
+     2. Browser diminta masuk layar penuh (Fullscreen API). Bisa
+        dimatikan di Pengaturan; bila ditolak (iframe/izin), mode tetap
+        berjalan penuh lewat CSS.
+     3. Satu-satunya kontrol = HUD melayang: muncul saat pointer menyentuh
+        tepi atas layar atau saat dinavigasi keyboard, lalu memudar sendiri.
+        HUD tidak pernah menghalangi teks (pointer-events: none saat pudar).
+     4. Kursor mouse ikut disembunyikan setelah tangan pindah ke keyboard. */
+
+  const HUD_PEEK_EDGE  = 84;    // px dari tepi atas = area pemanggil HUD
+  const HUD_HIDE_MS    = 2200;  // ms HUD bertahan tanpa interaksi
+  const CURSOR_IDLE_MS = 2400;  // ms tanpa gerak pointer -> kursor disembunyikan
+  const READER_POS_KEY = 'novel-writer-reader-pos';
+  const FONT_MIN = 14, FONT_MAX = 28;
+
+  /** requestAnimationFrame (dengan jaring pengaman di lingkungan tanpa rAF). */
+  function raf(fn) {
+    if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(fn);
+    return setTimeout(fn, 16);
+  }
+
+  function isImmersive() { return isFocusMode || isReaderMode; }
+
+  /** Layar sentuh / tanpa hover: aturan HUD-nya sedikit berbeda. */
+  function coarsePointer() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches);
+    } catch { return false; }
+  }
+
+  /* ---- Layar penuh browser ---- */
+
+  function fsActive() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  /** Minta layar penuh; gagal/ditolak TIDAK membatalkan mode imersif. */
+  function requestImmersiveFullscreen() {
+    if (!immersiveFullscreen) return Promise.resolve(false);
+    const el = document.documentElement;
+    if (!el) return Promise.resolve(false);
+    // Sudah penuh (atau sudah diminta) — mis. pindah Mode Fokus <-> Mode Baca:
+    // jangan keluar-masuk layar penuh, itu membuat kedipan yang mengganggu.
+    if (fsActive() || fsRequested) return Promise.resolve(true);
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (typeof fn !== 'function') return Promise.resolve(false);
+    let p;
+    try { p = fn.call(el, { navigationUI: 'hide' }); }
+    catch { try { p = fn.call(el); } catch { return Promise.resolve(false); } }
+    if (!p || typeof p.then !== 'function') return Promise.resolve(false);
+    fsRequested = true;
+    return p.then(() => true).catch(() => {
+      fsRequested = false;
+      // Cukup sekali per sesi: mode tetap jalan penuh lewat CSS
+      if (!fsFailNotified) { fsFailNotified = true; toast(t('fullscreenFail'), 5000); }
+      return false;
+    });
+  }
+
+  /** Lepas layar penuh — hanya bila aplikasi yang memintanya. */
+  function leaveImmersiveFullscreen() {
+    if (!fsRequested) return;
+    fsRequested = false;
+    const fn = document.exitFullscreen || document.webkitExitFullscreen;
+    if (typeof fn !== 'function') return;
+    try {
+      const p = fn.call(document);
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch {}
+  }
+
+  /** Layar penuh ditutup dari luar (Esc browser, tombol OS) -> ikut keluar. */
+  function onFullscreenChange() {
+    if (fsActive()) return;
+    fsRequested = false;
+    if (isFocusMode) exitFocusMode(false);
+    else if (isReaderMode) exitReaderMode(false);
+  }
+
+  /* ---- HUD ---- */
+
+  function hudVisible() {
+    return !!(dom.hud && dom.hud.classList.contains('is-visible'));
+  }
+
+  function setHudVisible(show, autoHide = true) {
+    if (!dom.hud || dom.hud.hidden) return;
+    dom.hud.classList.toggle('is-visible', !!show);
+    clearTimeout(hudTimer);
+    hudTimer = null;
+    if (!show || !autoHide) return;
+    hudTimer = setTimeout(() => {
+      if (!dom.hud || dom.hud.hidden) return;
+      if (dom.hud.contains(document.activeElement)) return; // sedang dipakai keyboard
+      setHudVisible(false, false);
+    }, coarsePointer() ? HUD_HIDE_MS * 2 : HUD_HIDE_MS);
+  }
+
+  /** Bagian HUD yang murah (dipanggil tiap ketikan / tiap gulungan). */
+  function updateHudInfo() {
+    if (!dom.hud || dom.hud.hidden) return;
+    if (dom.hudInfo) {
+      if (isReaderMode) {
+        const proj = Storage.getProject(activeProjectId);
+        const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+        const title = (ch && ch.title) || t('chapter');
+        dom.hudInfo.textContent = `${title} · ${Math.round(readerPct)}%`;
+      } else {
+        dom.hudInfo.textContent = wordsLabel(currentWords());
+      }
+    }
+    if (dom.hudProgress) {
+      const pct = isReaderMode ? Math.max(0, Math.min(100, readerPct)) : 0;
+      dom.hudProgress.style.width = pct.toFixed(1) + '%';
+    }
+  }
+
+  /** Isi HUD lengkap: tombol, label, ikon, keadaan nonaktif. */
+  function updateHud() {
+    if (!dom.hud) return;
+    updateHudInfo();
+    const ids = currentChapterIds();
+    const i = ids.indexOf(activeChapterId);
+    const many = ids.length > 1;
+    if (dom.hudPrev) { dom.hudPrev.hidden = !many; dom.hudPrev.disabled = i <= 0; }
+    if (dom.hudNext) { dom.hudNext.hidden = !many; dom.hudNext.disabled = i < 0 || i >= ids.length - 1; }
+    const sepNav = dom.hud.querySelector('.hud-sep');
+    if (sepNav) sepNav.hidden = !many;
+
+    if (dom.hudTheme) {
+      const dark = document.documentElement.dataset.theme === 'dark';
+      dom.hudTheme.innerHTML = dark ? Icons.sun : Icons.moon;
+      const label = dark ? t('themeToLight') : t('themeToDark');
+      dom.hudTheme.title = label;
+      dom.hudTheme.setAttribute('aria-label', label);
+    }
+    if (dom.hudSwitch) {
+      dom.hudSwitch.innerHTML = isReaderMode ? Icons.write : Icons.bookOpen;
+      const label = isReaderMode ? t('toFocusMode') : t('toReaderMode');
+      dom.hudSwitch.title = label;
+      dom.hudSwitch.setAttribute('aria-label', label);
+    }
+    if (dom.hudExit) {
+      const label = isReaderMode ? t('exitReaderMode') : t('exitFocusMode');
+      dom.hudExit.innerHTML = Icons.minimize;
+      dom.hudExit.title = `${label} (Esc)`;
+      dom.hudExit.setAttribute('aria-label', label);
+    }
+    const size = Storage.getSettings().fontSize || 18;
+    if (dom.hudFontDown) {
+      dom.hudFontDown.disabled = size <= FONT_MIN;
+      dom.hudFontDown.title = t('smallerFont');
+      dom.hudFontDown.setAttribute('aria-label', t('smallerFont'));
+    }
+    if (dom.hudFontUp) {
+      dom.hudFontUp.disabled = size >= FONT_MAX;
+      dom.hudFontUp.title = t('largerFont');
+      dom.hudFontUp.setAttribute('aria-label', t('largerFont'));
+    }
+  }
+
+  /** Jumlah kata bab aktif — dibaca langsung dari editor saat menulis. */
+  function currentWords() {
+    if (dom.editor && !dom.editor.hidden && (dirty || isFocusMode)) {
+      return TextUtil.countWords((dom.editor.textContent || '').replace(/\u00a0/g, ' '));
+    }
+    const proj = Storage.getProject(activeProjectId);
+    const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+    return ch ? wordCount(ch.content || '', ch.format) : 0;
+  }
+
+  function wordsLabel(n) {
+    const num = nf(n);
+    const one = (typeof getLang === 'function' && getLang() === 'en' && Number(n) === 1);
+    return t(one ? 'wordCountOne' : 'wordsCount', { n: num });
+  }
+
+  /** Pointer menyentuh tepi atas -> HUD muncul sebentar. */
+  function onImmersivePointer(e) {
+    if (!isImmersive()) return;
+    wakeCursor();
+    const y = typeof e.clientY === 'number' ? e.clientY : -1;
+    if (y < 0) return;
+    if (dom.hud && e.target && dom.hud.contains(e.target)) { setHudVisible(true); return; }
+    const edge = coarsePointer()
+      ? Math.max(72, Math.round((window.innerHeight || 0) * 0.14))
+      : HUD_PEEK_EDGE;
+    if (y <= edge) setHudVisible(true);
+    else if (coarsePointer()) setHudVisible(false, false); // ketukan di teks = sembunyikan
+  }
+
+  /* ---- Kursor mouse yang menganggur ---- */
+
+  function wakeCursor() {
+    document.documentElement.classList.remove('cursor-idle');
+    clearTimeout(cursorTimer);
+    if (!isImmersive()) return;
+    cursorTimer = setTimeout(() => {
+      if (!isImmersive() || hudVisible()) return;
+      document.documentElement.classList.add('cursor-idle');
+    }, CURSOR_IDLE_MS);
+  }
+
+  /* ---- Progres & posisi baca ---- */
+
+  function readerProgressPct() {
+    const wrap = dom.editorWrap;
+    if (!wrap) return null;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (!(max > 1)) return 100;   // lebih pendek dari satu layar = sudah terbaca
+    return Math.min(100, Math.max(0, (wrap.scrollTop / max) * 100));
+  }
+
+  function updateReaderProgress() {
+    const pct = readerProgressPct();
+    if (pct == null) return;
+    readerPct = pct;
+    updateHudInfo();
+  }
+
+  function readPositions() {
+    try { return JSON.parse(sessionStorage.getItem(READER_POS_KEY) || '{}') || {}; }
+    catch { return {}; }
+  }
+
+  /** Simpan posisi baca bab aktif (rasio, bukan piksel — tahan ubah ukuran). */
+  function saveReaderPosition(id) {
+    const key = id || activeChapterId;
+    if (!key || !isReaderMode) return;
+    const wrap = dom.editorWrap;
+    if (!wrap) return;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (!(max > 1)) return;
+    const ratio = Math.min(1, Math.max(0, wrap.scrollTop / max));
+    const map = readPositions();
+    map[key] = Math.round(ratio * 1000) / 1000;
+    try { sessionStorage.setItem(READER_POS_KEY, JSON.stringify(map)); } catch {}
+  }
+
+  /** Lanjutkan membaca dari posisi terakhir bab ini. */
+  function restoreReaderPosition(id) {
+    if (!isReaderMode || !id) return;
+    const ratio = Number(readPositions()[id]);
+    const wrap = dom.editorWrap;
+    if (Number.isFinite(ratio) && ratio > 0 && wrap) {
+      const max = wrap.scrollHeight - wrap.clientHeight;
+      if (max > 1) wrap.scrollTop = Math.round(max * Math.min(1, ratio));
+    }
+    updateReaderProgress();
+  }
+
+  function onReaderScroll() {
+    if (!isReaderMode || readerRaf) return;
+    readerRaf = raf(() => {
+      readerRaf = 0;
+      updateReaderProgress();
+      // Menyimpan posisi cukup sekali setelah gulungan berhenti (bukan tiap frame)
+      clearTimeout(readerPosTimer);
+      readerPosTimer = setTimeout(() => saveReaderPosition(), 400);
+    });
+  }
+
+  /* ---- Navigasi baca ---- */
+
+  /** Pindah bab tanpa meninggalkan mode imersif. */
+  function chapterStep(delta) {
+    const ids = currentChapterIds();
+    const i = ids.indexOf(activeChapterId);
+    if (i < 0) return false;
+    const j = i + delta;
+    if (j < 0) { toast(t('firstChapter'), 1800); return false; }
+    if (j >= ids.length) { toast(t('lastChapter'), 1800); return false; }
+    selectChapter(ids[j]);
+    return true;
+  }
+
+  function readerScrollBy(px) {
+    const wrap = dom.editorWrap;
+    if (!wrap) return;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (!(max > 0)) return;
+    wrap.scrollTop = Math.min(max, Math.max(0, wrap.scrollTop + px));
+  }
+
+  function readerPage(delta) {
+    const wrap = dom.editorWrap;
+    const vh = (wrap && wrap.clientHeight) || window.innerHeight || 600;
+    readerScrollBy(delta * Math.max(80, Math.round(vh * 0.88)));
+  }
+
+  function readerScrollToRatio(ratio) {
+    const wrap = dom.editorWrap;
+    if (!wrap) return;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (!(max > 0)) return;
+    wrap.scrollTop = Math.round(max * Math.min(1, Math.max(0, ratio)));
+  }
+
+  /** Pembacaan lewat keyboard tidak boleh membajak kontrol yang sedang fokus. */
+  function readerKeysAllowed() {
+    if (!isReaderMode || modalOpen()) return false;
+    const a = document.activeElement;
+    if (!a || !a.tagName) return true;
+    return !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName);
+  }
+
+  /**
+   * Panah kiri/kanan di dalam HUD = pindah tombol (pola toolbar ARIA),
+   * BUKAN ganti bab — supaya kontrol yang sedang difokuskan tetap bisa
+   * dipakai penuh dari keyboard.
+   */
+  function hudArrowNav(e) {
+    if (!dom.hud || dom.hud.hidden) return false;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
+    const active = document.activeElement;
+    if (!active || !dom.hud.contains(active)) return false;
+    const items = $$('.hud-btn', dom.hud).filter(b =>
+      !b.hidden && !b.disabled && !(isFocusMode && b.classList.contains('hud-font')));
+    const i = items.indexOf(active);
+    if (i < 0) return false;
+    e.preventDefault();
+    items[(i + (e.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length].focus();
+    setHudVisible(true, false);
+    return true;
+  }
+
+  /** Space / PageUp-Down / panah / Home / End saat Mode Baca. */
+  function handleReaderKey(e) {
+    if (!readerKeysAllowed() || e.ctrlKey || e.metaKey || e.altKey) return false;
+    switch (e.key) {
+      case 'ArrowRight': e.preventDefault(); chapterStep(1); return true;
+      case 'ArrowLeft':  e.preventDefault(); chapterStep(-1); return true;
+      case 'PageDown':   e.preventDefault(); readerPage(1); return true;
+      case 'PageUp':     e.preventDefault(); readerPage(-1); return true;
+      case ' ': case 'Spacebar':
+        e.preventDefault(); readerPage(e.shiftKey ? -1 : 1); return true;
+      case 'ArrowDown':  e.preventDefault(); readerPage(0.35); return true;
+      case 'ArrowUp':    e.preventDefault(); readerPage(-0.35); return true;
+      case 'Home':       e.preventDefault(); readerScrollToRatio(0); return true;
+      case 'End':        e.preventDefault(); readerScrollToRatio(1); return true;
+      default: return false;
+    }
+  }
+
+  /* ---- Typewriter (Mode Fokus): baris aktif dijaga di tengah ---- */
+
+  function scheduleTypewriter() {
+    if (!isFocusMode || !typewriterOn || typewriterRaf) return;
+    typewriterRaf = raf(() => { typewriterRaf = 0; typewriterScroll(); });
+  }
+
+  function typewriterScroll() {
+    if (!isFocusMode || !typewriterOn) return;
+    const ed = dom.editor;
+    if (!ed || ed.hidden) return;
+    const doc = ed.ownerDocument || document;
+    const sel = doc.getSelection ? doc.getSelection() : null;
+    if (!sel || !sel.rangeCount) return;
+    let rect = null;
+    try {
+      const r = sel.getRangeAt(0);
+      const rects = typeof r.getClientRects === 'function' ? r.getClientRects() : null;
+      rect = (rects && rects.length ? rects[rects.length - 1] : null) ||
+             (typeof r.getBoundingClientRect === 'function' ? r.getBoundingClientRect() : null);
+    } catch { return; }
+    const vh = window.innerHeight || 0;
+    // Tanpa layout nyata (mis. jsdom) semua nilai 0 -> tidak ada yang digulirkan
+    if (!rect || !vh || (!rect.top && !rect.bottom && !rect.height)) return;
+    const delta = rect.top - vh * 0.45;
+    if (Math.abs(delta) < 24) return;   // hindari getar untuk geseran kecil
+    try {
+      if (typeof ed.scrollBy === 'function') ed.scrollBy({ top: delta, behavior: 'smooth' });
+      else ed.scrollTop += delta;
+    } catch { try { ed.scrollTop += delta; } catch {} }
+  }
+
+  /* ---- Sinkronisasi chrome imersif ---- */
+
+  /** Selaraskan kelas, HUD, dan layar penuh dengan mode yang aktif. */
+  function syncImmersive() {
+    const root = document.documentElement;
+    const on = isImmersive();
+    root.classList.toggle('immersive', on);
+    root.classList.toggle('typewriter', on && isFocusMode && typewriterOn);
+    if (dom.hud) dom.hud.hidden = !on;
+    if (!on) {
+      clearTimeout(hudTimer);    hudTimer = null;
+      clearTimeout(cursorTimer); cursorTimer = null;
+      clearTimeout(readerPosTimer); readerPosTimer = null;
+      root.classList.remove('cursor-idle');
+      if (dom.hud) dom.hud.classList.remove('is-visible');
+      leaveImmersiveFullscreen();
+      return;
+    }
+    updateHud();
+    setHudVisible(true);
+    wakeCursor();
+  }
+
+  /** Ukuran huruf dari HUD (Mode Baca) — pengaturan global yang sama. */
+  function bumpFontSize(delta) {
+    const s = Storage.getSettings();
+    const next = Math.min(FONT_MAX, Math.max(FONT_MIN, (s.fontSize || 18) + delta));
+    if (next === s.fontSize) { updateHud(); return; }
+    applyFontSize(next);
+    persist(Storage.saveSettings({ fontSize: next }));
+    updateHud();
+    setHudVisible(true);
+  }
+
+  /** Tombol "baca/tulis" di HUD: berpindah tanpa keluar dari layar penuh. */
+  function switchImmersiveMode() {
+    if (isReaderMode) enterFocusMode();
+    else if (isFocusMode) enterReaderMode();
+  }
+
+  function exitImmersive(showToast = true) {
+    if (isFocusMode) exitFocusMode(showToast);
+    else if (isReaderMode) exitReaderMode(showToast);
+  }
+
+  // ============ MODE FOKUS & MODE BACA (masuk / keluar) ============
   function updateFocusReaderButtons() {
     if (dom.btnFocus) {
       dom.btnFocus.setAttribute('aria-pressed', String(isFocusMode));
@@ -831,26 +1307,33 @@
 
   function enterFocusMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
-    if (isReaderMode) exitReaderMode(false);
+    if (modalOpen()) closeModal();     // modal = gangguan: tutup dulu
     saveCurrentChapter({ silent: true });
+    const wasImmersive = isImmersive();
+    isReaderMode = false;
     isFocusMode = true;
-    document.documentElement.classList.add('focus-mode');
+    const root = document.documentElement;
+    root.classList.remove('reader-mode');
+    root.classList.add('focus-mode');
     closeSidebar();
     renderEditor();
-    updateFocusReaderButtons();
-    toast(t('focusToast'), 3000);
+    syncImmersive();                       // chrome hilang, HUD menyala sebentar
+    requestImmersiveFullscreen();          // layar penuh browser (bila diizinkan)
+    if (!wasImmersive) toast(t('focusToast'), 3000);
     setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 80);
   }
+
   function exitFocusMode(showToast = true) {
     if (!isFocusMode) return;
     isFocusMode = false;
-    document.documentElement.classList.remove('focus-mode');
-    document.querySelector('#toolbar')?.classList.remove('is-peek');
+    document.documentElement.classList.remove('focus-mode', 'typewriter');
     renderEditor();
+    syncImmersive();                       // HUD & layar penuh dilepas
     updateFocusReaderButtons();
     if (showToast) toast(t('exitFocusMode'), 2000);
     setTimeout(() => { try { dom.editor?.focus(); } catch {} }, 50);
   }
+
   function toggleFocusMode() {
     if (isFocusMode) exitFocusMode();
     else enterFocusMode();
@@ -858,23 +1341,35 @@
 
   function enterReaderMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
-    if (isFocusMode) exitFocusMode(false);
+    if (modalOpen()) closeModal();     // modal = gangguan: tutup dulu
     saveCurrentChapter({ silent: true });
+    const wasImmersive = isImmersive();
+    isFocusMode = false;
     isReaderMode = true;
-    document.documentElement.classList.add('reader-mode');
+    const root = document.documentElement;
+    root.classList.remove('focus-mode', 'typewriter');
+    root.classList.add('reader-mode');
     closeSidebar();
-    renderEditor(); // merender tampilan baca (renderReader) karena isReaderMode aktif
-    updateFocusReaderButtons();
-    toast(t('readerToast'), 3000);
+    renderEditor();                        // merender halaman buku (renderReader)
+    syncImmersive();
+    requestImmersiveFullscreen();
+    if (!wasImmersive) toast(t('readerToast'), 3500);
   }
+
   function exitReaderMode(showToast = true) {
     if (!isReaderMode) return;
+    saveReaderPosition();                  // lanjutkan di sini lain kali
     isReaderMode = false;
+    readerPct = 0;
+    dirty = false;                         // isi editor basi -> muat ulang dari storage
     document.documentElement.classList.remove('reader-mode');
     renderEditor();
+    syncImmersive();
     updateFocusReaderButtons();
     if (showToast) toast(t('exitReaderMode'), 2000);
+    setTimeout(() => { try { if (!isReaderMode) dom.editor?.focus(); } catch {} }, 50);
   }
+
   function toggleReaderMode() {
     if (isReaderMode) exitReaderMode();
     else enterReaderMode();
@@ -1004,8 +1499,14 @@
     const s = Storage.getSettings();
     activeProjectId = s.lastProject;
     activeChapterId = s.lastChapter;
-    if (isFocusMode) { isFocusMode = false; document.documentElement.classList.remove('focus-mode'); document.querySelector('#toolbar')?.classList.remove('is-peek'); }
-    if (isReaderMode) { isReaderMode = false; document.documentElement.classList.remove('reader-mode'); }
+    // Data diganti total -> keluar dari mode imersif (chrome & layar penuh dilepas)
+    if (isImmersive()) {
+      isFocusMode = false;
+      isReaderMode = false;
+      readerPct = 0;
+      document.documentElement.classList.remove('focus-mode', 'reader-mode', 'typewriter');
+      syncImmersive();
+    }
     dirty = false;
     autoSaveDelay = s.autoSaveDelay || 1000;
     applyTheme(s.theme);
@@ -1183,11 +1684,44 @@
         if (btn) applyFmt(btn.dataset.fmt);
       });
     }
-    document.addEventListener('selectionchange', updateToolbar);
+    document.addEventListener('selectionchange', () => { updateToolbar(); scheduleTypewriter(); });
 
     dom.btnFocus?.addEventListener('click', toggleFocusMode);
     dom.btnReader?.addEventListener('click', toggleReaderMode);
     $('#btn-theme')?.addEventListener('click', toggleTheme);
+
+    /* ---- HUD imersif (Mode Fokus & Mode Baca) ---- */
+    dom.hudPrev?.addEventListener('click', () => { chapterStep(-1); });
+    dom.hudNext?.addEventListener('click', () => { chapterStep(1); });
+    dom.hudFontDown?.addEventListener('click', () => bumpFontSize(-1));
+    dom.hudFontUp?.addEventListener('click', () => bumpFontSize(1));
+    dom.hudTheme?.addEventListener('click', () => { toggleTheme(); updateHud(); });
+    dom.hudSwitch?.addEventListener('click', switchImmersiveMode);
+    dom.hudExit?.addEventListener('click', () => exitImmersive(true));
+    // HUD yang sedang disentuh/difokuskan tidak boleh memudar
+    dom.hud?.addEventListener('mouseenter', () => setHudVisible(true, false));
+    dom.hud?.addEventListener('mouseleave', () => { if (isImmersive()) setHudVisible(true); });
+    dom.hud?.addEventListener('focusin', () => setHudVisible(true, false));
+    dom.hud?.addEventListener('focusout', (e) => {
+      if (dom.hud && !dom.hud.contains(e.relatedTarget)) setHudVisible(false, false);
+    });
+    // Pemanggil HUD: pointer menyentuh tepi atas layar (ketukan di layar sentuh)
+    document.addEventListener('pointermove', onImmersivePointer, { passive: true });
+    document.addEventListener('pointerdown', onImmersivePointer, { passive: true });
+    if (typeof window.PointerEvent !== 'function') {
+      // Peramban lama / lingkungan uji tanpa PointerEvent
+      document.addEventListener('mousemove', onImmersivePointer, { passive: true });
+      document.addEventListener('mousedown', onImmersivePointer, { passive: true });
+    }
+    // Progres baca + posisi baca terakhir
+    dom.editorWrap?.addEventListener('scroll', onReaderScroll, { passive: true });
+    // Ubah ukuran layar/rotasi -> hitung ulang progres baca
+    window.addEventListener('resize', () => {
+      if (isReaderMode) raf(() => updateReaderProgress());
+    });
+    // Layar penuh ditutup dari luar (Esc browser / tombol OS) -> ikut keluar
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
     dom.btnExport?.addEventListener('click', () => openModal('modal-export'));
     $$('.btn-export-opt').forEach(btn => {
@@ -1229,6 +1763,8 @@
       applyFontSize(s.fontSize);
       applyLineHeight(s.lineHeight || 1.8);
       applyAutoSave(s.autoSaveDelay || 1000);
+      const fs = $('#set-fullscreen'); if (fs) fs.checked = s.immersiveFullscreen !== false;
+      const tw = $('#set-typewriter'); if (tw) tw.checked = s.focusTypewriter === true;
       updateUndoRestoreButton();
       openModal('modal-settings');
     });
@@ -1258,6 +1794,23 @@
       const delay = parseInt(e.target.value, 10);
       applyAutoSave(delay);
       persist(Storage.saveSettings({ autoSaveDelay: delay }));
+    });
+
+    /* ---- Mode imersif ---- */
+    $('#set-fullscreen')?.addEventListener('change', (e) => {
+      immersiveFullscreen = !!e.target.checked;
+      persist(Storage.saveSettings({ immersiveFullscreen: immersiveFullscreen }));
+      // Perubahan langsung terasa: sedang berada di mode imersif?
+      if (!isImmersive()) return;
+      if (immersiveFullscreen) requestImmersiveFullscreen();
+      else leaveImmersiveFullscreen();
+    });
+
+    $('#set-typewriter')?.addEventListener('change', (e) => {
+      typewriterOn = !!e.target.checked;
+      persist(Storage.saveSettings({ focusTypewriter: typewriterOn }));
+      document.documentElement.classList.toggle('typewriter', isImmersive() && isFocusMode && typewriterOn);
+      scheduleTypewriter();
     });
 
     $('#btn-backup')?.addEventListener('click', backupData);
@@ -1297,6 +1850,11 @@
       if (e.key === 'F9' && !mod) { e.preventDefault(); toggleFocusMode(); return; }
       if (e.key === 'F10' && !mod) { e.preventDefault(); toggleReaderMode(); return; }
 
+      // HUD sedang difokuskan: panah = pindah tombol (bukan ganti bab)
+      if (isImmersive() && hudArrowNav(e)) return;
+      // Mode Baca: panah = ganti bab, Space/PgUp-PgDn = balik halaman
+      if (isReaderMode && handleReaderKey(e)) return;
+
       if (e.key === 'Escape') {
         if (modalOpen()) closeModal();
         else if (isFocusMode) exitFocusMode();
@@ -1323,21 +1881,6 @@
     // ---- Tab lain menulis data ----
     window.addEventListener('storage', onExternalStorage);
   }
-
-    // ---- toolbar peek di focus-mode ----
-    let _peekTimer = null;
-    document.addEventListener('mousemove', (e) => {
-      if (!isFocusMode) return;
-      const tb = document.querySelector('#toolbar');
-      if (!tb) return;
-      if (e.clientY < 56) {
-        tb.classList.add('is-peek');
-        clearTimeout(_peekTimer);
-      } else if (!tb.matches(':hover') && !tb.contains(document.activeElement)) {
-        clearTimeout(_peekTimer);
-        _peekTimer = setTimeout(() => tb.classList.remove('is-peek'), 900);
-      }
-    });
 
   // ============ REGISTER PWA SERVICE WORKER ============
   function registerServiceWorker() {
@@ -1429,8 +1972,19 @@
       saveCurrentChapter,
       flushNow,
       renderAll,
+      /* mode imersif: dipanggil pengujian, bukan API publik yang stabil */
+      enterFocusMode,
+      exitFocusMode,
+      enterReaderMode,
+      exitReaderMode,
+      chapterStep,
+      updateHud,
+      setHudVisible,
       get state() {
-        return { activeProjectId, activeChapterId, isFocusMode, isReaderMode, dirty };
+        return {
+          activeProjectId, activeChapterId, isFocusMode, isReaderMode,
+          dirty, fullscreenRequested: fsRequested, readerPct
+        };
       }
     };
   }

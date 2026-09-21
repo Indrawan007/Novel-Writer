@@ -28,7 +28,10 @@ const Storage = {
         lang: 'id',
         lastProject: null,
         lastChapter: null,
-        sidebarCollapsed: false
+        sidebarCollapsed: false,
+        /* Mode imersif (Mode Fokus & Mode Baca) */
+        immersiveFullscreen: true,   // minta layar penuh browser saat masuk
+        focusTypewriter: false       // jaga kursor tetap di tengah layar
       }
     };
   },
@@ -157,7 +160,10 @@ const Storage = {
       lang: s.lang === 'en' ? 'en' : 'id',
       lastProject: typeof s.lastProject === 'string' ? s.lastProject : null,
       lastChapter: typeof s.lastChapter === 'string' ? s.lastChapter : null,
-      sidebarCollapsed: s.sidebarCollapsed === true
+      sidebarCollapsed: s.sidebarCollapsed === true,
+      // bawaan TRUE: layar penuh adalah inti pengalaman mode imersif
+      immersiveFullscreen: s.immersiveFullscreen !== false,
+      focusTypewriter: s.focusTypewriter === true
     };
   },
 

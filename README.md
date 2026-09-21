@@ -14,8 +14,9 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   (**Tebal**, **Miring**, **Subjudul**, **Kutipan**, **Jeda adegan**) menerapkan
   format sungguhan; tidak ada `**`, `#`, atau penanda apa pun yang diketik/disimpan.
   Tekan Enter untuk paragraf baru; baris kosong = jeda (mis. ganti adegan)
-- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — bab tampil
-  seperti halaman buku, format ikut tampil utuh
+- **Mode Fokus** (`Ctrl+Shift+F`) & **Mode Baca** (`Ctrl+Shift+R`) — keduanya kini
+  **imersif penuh**: layar penuh browser, semua chrome hilang, hanya tulisan yang
+  tersisa (lihat [Mode Imersif](#mode-imersif--layar-penuh-tanpa-gangguan))
 - **Auto-save** (interval 0,5–5 detik, bisa diatur) + **flush otomatis saat tab ditutup**
 - Statistik kata (tanda baca yang berdiri sendiri tidak dihitung)
 - Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel (format tebal/miring/
@@ -31,7 +32,7 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
   backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 48 kasus (Node + jsdom) + CI
+- **Test suite** 60 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -71,31 +72,91 @@ python3 -m http.server 8000
 > membuat aplikasi aman juga saat di-deploy ke sub-path
 > (mis. GitHub Pages: `https://user.github.io/Novel-Writer/`).
 
+## Mode Imersif — Layar Penuh Tanpa Gangguan
+
+Mode Fokus dan Mode Baca berbagi satu mesin imersif: begitu aktif, **yang tersisa
+di layar hanyalah tulisan**.
+
+| Yang hilang | Cara kerjanya |
+|---|---|
+| Sidebar, toolbar, panel format, statistik, indikator simpan | `display: none` (bukan digeser) — tidak menyisakan ruang layout |
+| Chrome browser (tab, address bar, bookmark) | Fullscreen API diminta saat masuk mode; bisa dimatikan di Pengaturan |
+| Scrollbar | Disembunyikan (`scrollbar-width: none`) — menggulir tetap normal |
+| Kursor mouse | Menghilang setelah ~2,4 detik tanpa gerak, kembali begitu pointer bergerak |
+
+**HUD melayang** adalah satu-satunya kontrol. Ia muncul saat pointer menyentuh
+tepi atas layar (atau saat dinavigasi dengan `Tab`), lalu memudar sendiri setelah
+±2 detik. Saat pudar, HUD tidak menangkap klik (`pointer-events: none`), jadi
+tidak pernah menghalangi teks.
+
+Isi HUD menyesuaikan mode:
+
+- **Mode Fokus** — `‹ bab` · *jumlah kata (langsung saat mengetik)* · `bab ›` ·
+  tema · pindah ke Mode Baca · keluar
+- **Mode Baca** — `‹ bab` · *judul bab · progres %* · `bab ›` · ukuran huruf
+  (`A−` / `A+`) · tema · kembali menulis · keluar, plus **rambut progres** 2px di
+  dasar layar
+
+Perilaku Mode Baca:
+
+- Bab dirender sebagai **halaman buku**: judul bab di tengah dengan garis rambut,
+  paragraf rata kanan-kiri, teks memudar di tepi atas/bawah
+- **Pindah bab tanpa keluar mode** (tombol HUD atau `←` / `→`), termasuk saat
+  layar penuh — tidak ada kedipan karena sesi layar penuh dipertahankan
+- **Balik halaman** dengan `Space` / `PageDown` / `PageUp` / `↑` `↓` / `Home` / `End`
+- **Posisi baca diingat** per bab (rasio, tahan ubah ukuran layar) — kembali ke
+  bab itu melanjutkan dari tempat terakhir
+- Ukuran huruf diubah dari HUD memakai rentang pengaturan yang sama (14–28px)
+
+Perilaku Mode Fokus:
+
+- Kolom tulis dipusatkan dengan padding longgar (atas `clamp(30px, 9vh, 104px)`,
+  bawah ≥ 30vh) sehingga tidak ada "dinding" di akhir bab
+- Opsional **typewriter scrolling** (Pengaturan → *Kursor dijaga di tengah*):
+  baris yang sedang ditulis otomatis digulir ke ±45% tinggi layar
+- Format tetap bisa dipakai lewat `Ctrl+B` / `Ctrl+I` walau panel format tersembunyi
+
+Pengaturan (Pengaturan → **Mode Imersif**):
+
+- **Layar penuh otomatis** — minta Fullscreen API saat masuk mode (bawaan: aktif).
+  Bila browser menolak (mis. iframe tanpa izin), aplikasi memberitahu sekali dan
+  mode tetap berjalan penuh lewat CSS.
+- **Kursor dijaga di tengah** — typewriter scrolling untuk Mode Fokus (bawaan: mati).
+
+Keluar dari mode imersif: `Esc`, tombol keluar di HUD, atau pintasan mode yang
+sama (`Ctrl+Shift+F` / `Ctrl+Shift+R`). Menutup layar penuh dari browser
+(Esc native / tombol OS) juga mengeluarkan mode secara otomatis.
+
 ## Pintasan Keyboard
 
 | Tombol | Fungsi |
 |---|---|
 | `Ctrl+S` | Simpan sekarang |
 | `Ctrl+B` / `Ctrl+I` | Tebal / Miring pada seleksi |
-| `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle) |
-| `Ctrl+Shift+R` / `F10` | Mode Baca (toggle) |
-| `Tab` / `Shift+Tab` | Indent / un-indent **per paragraf** pada seleksi |
+| `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle, layar penuh) |
+| `Ctrl+Shift+R` / `F10` | Mode Baca (toggle, layar penuh) |
+| `←` / `→` | Mode Baca: bab sebelumnya / berikutnya |
+| `Space` / `PageDown` / `PageUp` | Mode Baca: balik halaman |
+| `Home` / `End` | Mode Baca: awal / akhir bab |
+| `Tab` | Mode imersif: panggil HUD (lalu panah = pindah tombol HUD) |
+| `Tab` / `Shift+Tab` | Indent / un-indent **per paragraf** pada seleksi (di editor) |
 | `Alt+↑` / `Alt+↓` | Pindahkan bab (saat fokus di daftar bab) |
 | `Enter` / `Spasi` | Buka proyek/bab (saat fokus di daftar) |
-| `Esc` | Tutup modal → keluar Mode Fokus/Baca → tutup sidebar (berurutan) |
+| `Esc` | Tutup modal → keluar Mode Fokus/Baca (+ layar penuh) → tutup sidebar |
 
 ## Struktur Proyek
 
 ```
-index.html            Struktur UI (sidebar, panel format, editor, modal)
-css/style.css         Tema editorial light/dark (CSS variables), layout, responsif
+index.html            Struktur UI (sidebar, panel format, editor, HUD imersif, modal)
+css/style.css         Tema editorial light/dark (CSS variables), layout, responsif,
+                      mode imersif (Fokus/Baca layar penuh + HUD)
 js/storage.js         Lapisan data (cache in-memory + localStorage, key: novel-writer-data)
 js/i18n.js            Terjemahan ID/EN (teks, placeholder, title, aria-label)
 js/icons.js           Ikon SVG stroke inline (tanpa emoji)
 js/text.js            Utilitas teks polos (paragraf, hitung kata)
 js/richtext.js        Model blok + sanitasi allowlist + operasi seleksi (WYSIWYG)
 js/export.js          Modul ekspor (TXT / PDF / DOCX)
-js/app.js             Inti aplikasi (state, render, CRUD, editor, DnD, PWA)
+js/app.js             Inti aplikasi (state, render, CRUD, editor, DnD, mode imersif, PWA)
 sw.js                 Service Worker (navigasi network-first, aset SWR)
 manifest.json         Manifest PWA
 icon.svg              Ikon vektor (di-commit; favicon + manifest)
@@ -109,7 +170,7 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 48 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 60 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
@@ -117,7 +178,10 @@ jeda adegan, tanpa penyisipan penanda), regresi "Tab menghapus seleksi",
 flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
 sanitasi (script/handler tidak ikut hidup), keamanan restore, ekspor
 (TXT/DOCX menghormati format), i18n, fokus modal, urutan bab (keyboard & drag),
-sinkronisasi antar-tab, konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
+sinkronisasi antar-tab, **mode imersif** (chrome hilang, HUD & hitungan kata,
+permintaan/pelepasan layar penuh, layar penuh yang ditutup browser, pudar HUD +
+kursor menganggur, navigasi & progres Mode Baca, ukuran huruf dari HUD,
+pengaturan tersimpan), konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
 jaminan **tanpa parser sintaks** di seluruh produk.
 
 ## Regenerasi Ikon
@@ -144,6 +208,28 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.4
+
+- **Mode Fokus & Mode Baca jadi benar-benar imersif**: layar penuh browser
+  (Fullscreen API, bisa dimatikan), seluruh chrome dihapus dari layout
+  (sidebar, toolbar, panel format, statistik, indikator simpan, scrollbar),
+  dan satu **HUD melayang** yang muncul saat diminta lalu memudar sendiri.
+- **Mode Baca**: judul bab kini dirender sebagai judul halaman (regresi v1.3
+  diperbaiki), pindah bab tanpa keluar mode (HUD / `←` `→`), balik halaman
+  (`Space` / `PgUp` / `PgDn`), rambut progres baca, posisi baca terakhir diingat
+  per bab, dan ukuran huruf bisa diubah dari HUD.
+- **Mode Fokus**: kolom tulis lebih longgar, kursor mouse disembunyikan saat
+  menganggur, dan opsi **typewriter scrolling** (baris aktif dijaga di tengah).
+- Pindah Mode Fokus ↔ Mode Baca mempertahankan satu sesi layar penuh (tanpa kedipan);
+  menutup layar penuh dari browser ikut mengeluarkan mode.
+- **Perbaikan data**: isi editor yang "basi" tidak lagi mungkin dituliskan ke bab
+  lain — `saveCurrentChapter()` menolak menulis saat editor tersembunyi (Mode
+  Baca), dan keluar dari Mode Baca selalu memuat ulang bab dari storage.
+- **Perbaikan**: judul bab hilang di Mode Baca & ekspor `.txt` (regresi v1.3),
+  CSS Mode Fokus lama yang menunjuk variabel tak ada (`--surface-2`), blok
+  `.reader-nav` mati yang tak pernah dipakai, dan pemantau `mousemove` yang
+  terpasang di luar `bindEvents()`.
 
 ## Catatan Rilis v1.3
 

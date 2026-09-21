@@ -99,6 +99,9 @@ const Exporter = {
     if (data.author) out += data.author + nl;
     data.sections.forEach(sec => {
       out += nl + nl;
+      // Judul bab ikut tertulis (heading null = ekspor satu bab: judulnya
+      // sudah jadi judul dokumen di baris pertama)
+      if (sec.heading) out += sec.heading + nl + nl;
       const isi = sec.format === 'html'
         ? RichText.toPlainText(sec.content)
         : String(sec.content || '');
