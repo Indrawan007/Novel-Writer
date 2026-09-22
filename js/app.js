@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.1';
+  const VERSION = '1.4.2';
 
   // ============ STATE ============
   let activeProjectId = Storage.getSettings().lastProject;
@@ -215,7 +215,6 @@
     if (yes) {
       yes.textContent = o.confirmLabel || t('delete');
       yes.className = o.danger === false ? 'btn-primary' : 'btn-danger';
-      yes.id = 'btn-confirm-yes';
     }
     confirmCallback = cb;
     openModal('modal-confirm');
@@ -918,8 +917,6 @@
     }
   }
 
-  // ============ MODE FOKUS & MODE BACA ============
-
   // ============ MODE FOKUS & MODE BACA (imersif: fullscreen, nol gangguan) ============
 
   /* ---- Fullscreen bawaan browser (kegagalan = mode tetap jalan tanpa fullscreen) ---- */
@@ -1610,17 +1607,18 @@
 
   /** Tempelkan draf darurat ke akhir bab yang sedang dibuka. */
   function restoreDraft() {
-    const draft = Storage.takeDraft();
-    if (!draft) { toast(t('draftNone'), 3000); updateRestoreDraftButton(); return; }
+    // Periksa tujuan LEBIH DULU — takeDraft() menghapus draf dari penyimpanan,
+    // jadi draf tidak boleh diambil sebelum ada tempat menempelnya.
+    if (!Storage.hasDraft()) { toast(t('draftNone'), 3000); updateRestoreDraftButton(); return; }
     const proj = Storage.getProject(activeProjectId);
     const ch = proj?.chapters?.find(c => c.id === activeChapterId);
-    if (!ch) {                                  // kembalikan, jangan dibuang
-      Storage.saveDraft(draft.html);
+    if (!ch || !dom.editor) {                   // draf dibiarkan utuh
       toast(t('draftNeedChapter'), 4000, 'error');
       updateRestoreDraftButton();
       return;
     }
-    if (!dom.editor) return;
+    const draft = Storage.takeDraft();
+    if (!draft) { toast(t('draftNone'), 3000); updateRestoreDraftButton(); return; }
     RichText.setContent(dom.editor, RichText.getHtml(dom.editor) + draft.html, 'html');
     dirty = true;
     markDirty();

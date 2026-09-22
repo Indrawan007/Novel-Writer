@@ -81,8 +81,6 @@ const RichText = {
       // nbsp tetap dihargai (indent pengguna) karena bukan spasi biasa.
       if (!cur && !/[^ ]/.test(norm)) return;
       ensure();
-      const norm = String(text).replace(/[\t\n\r\f]+/g, ' ');
-      if (!norm) return;
       const last = cur.runs[cur.runs.length - 1];
       if (last && last.bold === bold && last.italic === italic) last.text += norm;
       else cur.runs.push({ text: norm, bold: !!bold, italic: !!italic });

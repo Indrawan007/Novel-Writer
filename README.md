@@ -38,7 +38,7 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
   backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 62 kasus (Node + jsdom) + CI
+- **Test suite** 66 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -117,7 +117,7 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 62 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 66 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
@@ -155,6 +155,27 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.4.2
+
+Rilis perbaikan blocker dari audit ulang (rincian di [`BUGS.md`](BUGS.md)):
+
+- **Aplikasi kembali hidup** — `js/richtext.js` gagal di-parse (`SyntaxError:
+  Identifier 'norm' has already been declared`, deklarasi ganda sisa salin-tempel),
+  sehingga modul editor tidak pernah dimuat: isi bab tampil kosong, tombol tidak
+  bereaksi, dan ketikan tidak tersimpan. Deklarasi berulang dihapus.
+- **Draf darurat kembali bekerja** — `DRAFT_KEY` tertelan komentar sehingga
+  `saveDraft()` selalu gagal senyap, padahal UI menjanjikan "tulisanmu disimpan
+  sebagai draf". Konstanta dipisah ke barisnya sendiri.
+- **Impor aman dari id kembar** — id proyek/bab yang sama di dalam berkas
+  cadangan kini di-dedupe (akhiran `-2`, `-3`, …), jadi butir kedua tidak lagi
+  tidak-bisa-dibuka.
+- **Statistik dialog restore konsisten** — hitung kata memakai aturan yang sama
+  dengan aplikasi (tag & entitas HTML tidak dihitung; tanda baca lepas juga tidak).
+- **Draf tidak dibuang tanpa tujuan** — `restoreDraft()` memeriksa bab tujuan dan
+  editor lebih dulu sebelum draf diambil (dulu draf hilang bila tidak ada tempat
+  menempelnya).
+- Tambahan 4 tes regresi (B-02 … B-05) dan pembersihan kode mati.
 
 ## Catatan Rilis v1.4.1
 

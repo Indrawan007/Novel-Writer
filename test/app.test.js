@@ -632,3 +632,16 @@ test('BUG-16: cadangkan saat penyimpanan gagal -> berkas tetap dibuat + peringat
   assert.ok($('#toast').classList.contains('toast-error'), 'pengguna diperingatkan, bukan ditelan');
   restore();
 });
+
+test('B-05: draf tidak dibuang bila belum ada bab tujuan', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject(false) });
+  assert.equal(S.saveDraft('<p>tulisan darurat</p>'), true);
+  click(w, $('#btn-settings'));
+  assert.equal($('#btn-restore-draft').hidden, false, 'tombol "Pulihkan draf" muncul');
+
+  click(w, $('#btn-restore-draft'));
+  assert.equal(S.hasDraft(), true, 'draf TIDAK dibuang — masih bisa dipulihkan nanti');
+  assert.equal($('#toast').hidden, false);
+  assert.match($('#toast').textContent, /Buka sebuah bab/i);
+  assert.deepEqual(w.__errors, []);
+});

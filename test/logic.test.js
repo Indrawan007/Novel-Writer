@@ -314,3 +314,49 @@ test('BUG-11: RichText.domText menghitung kata tanpa parse ulang dokumen', () =>
   assert.equal(TextUtil.countWords(RichText.domText(ind)), 1);
   assert.equal(RichText.domText(null), '');
 });
+
+/* ---- Regresi audit ulang (BUGS.md: B-02, B-03, B-04) ---- */
+
+test('B-02: draf darurat benar-benar ditulis, dibaca, lalu dibersihkan', () => {
+  assert.equal(Storage.saveDraft('<p>tulisan darurat</p>'), true, 'tulis draf sukses');
+  assert.equal(Storage.hasDraft(), true, 'draf terdeteksi (tombol pulihkan muncul)');
+  const d = Storage.takeDraft();
+  assert.equal(d && d.html, '<p>tulisan darurat</p>', 'isi draf kembali utuh');
+  assert.equal(Storage.hasDraft(), false, 'draf sekali pakai');
+  assert.equal(Storage.takeDraft(), null);
+});
+
+test('B-03: id kembar dari berkas cadangan di-dedupe (butir kedua tetap terbuka)', () => {
+  const backup = JSON.stringify({ projects: [
+    { id: 'dupx', title: 'Duplikat A', chapters: [
+      { id: 'ca', title: 'C1', content: '<p>a</p>', format: 'html', order: 1 }] },
+    { id: 'dupx', title: 'Duplikat B', chapters: [
+      { id: 'cb', title: 'C2', content: '<p>b</p>', format: 'html', order: 1 }] },
+    { id: 'dupy', title: 'Duplikat C', chapters: [
+      { id: 'cd', title: 'C3', content: '<p>c</p>', format: 'html', order: 1 },
+      { id: 'cd', title: 'C4', content: '<p>d</p>', format: 'html', order: 2 }] }
+  ], settings: {} });
+  assert.equal(Storage.importAll(backup), true);
+
+  const byTitle = (t) => Storage.getProjects().find(p => p.title === t);
+  const a = byTitle('Duplikat A'), b = byTitle('Duplikat B');
+  assert.notEqual(a.id, b.id, 'id proyek kembar jadi unik');
+  assert.equal(Storage.getProject(b.id).title, 'Duplikat B', 'proyek kedua bisa dibuka lewat id-nya');
+
+  const c = byTitle('Duplikat C');
+  assert.equal(c.chapters.length, 2, 'tidak ada bab yang hilang');
+  assert.equal(new Set(c.chapters.map(ch => ch.id)).size, 2, 'id bab kembar dalam satu proyek jadi unik');
+  assert.deepEqual(plain(c.chapters.map(ch => ch.title)).sort(), ['C3', 'C4']);
+});
+
+test('B-04: hitung kata dialog restore = hitungan aplikasi (entitas & tanda baca lepas)', () => {
+  const sum = (content) => Storage.summarizeData({ projects: [{ chapters: [{ content }] }] }).words;
+  const app = (content) => RichText.wordCount(content, 'html');
+
+  assert.equal(sum('<p>—</p>'), 0, 'tanda baca yang berdiri sendiri bukan kata');
+  assert.equal(sum('<p>a &amp; b</p>'), 2, 'entitas HTML tidak dihitung sebagai kata');
+  assert.equal(sum('<p>Halo <strong>dunia</strong>.</p>'), 2);
+  for (const c of ['<p>—</p>', '<p>a &amp; b</p>', '<p>Halo <strong>dunia</strong>.</p>', '<p>&lt;tag&gt;</p>']) {
+    assert.equal(sum(c), app(c), `ringkasan harus sama dengan aplikasi untuk ${c}`);
+  }
+});

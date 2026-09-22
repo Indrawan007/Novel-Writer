@@ -11,7 +11,8 @@
    ============================================ */
 
 const DB_KEY = 'novel-writer-data';
-const SNAPSHOT_KEY = 'novel-writer-data-prev'; // cadangan otomatis sebelum restoreconst DRAFT_KEY = 'novel-writer-draft';        // draf darurat: ketikan tanpa bab tujuan
+const SNAPSHOT_KEY = 'novel-writer-data-prev'; // cadangan otomatis sebelum restore
+const DRAFT_KEY = 'novel-writer-draft';        // draf darurat: ketikan tanpa bab tujuan
 
 const Storage = {
   _cache: null,
@@ -41,6 +42,29 @@ const Storage = {
   /* ---- id: hanya karakter aman (mencegah injeksi ke atribut HTML) ---- */
   _safeId(v) {
     return (typeof v === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(v)) ? v : this.uid();
+  },
+
+  /**
+   * Pastikan id setiap butir unik.
+   * Berkas eksternal (cadangan) bisa memuat id kembar; tanpa ini butir kedua
+   * tidak akan pernah bisa dibuka (pencarian selalu menemukan yang pertama).
+   * Akhiran deterministik dipakai (bukan id acak baru) supaya hasil
+   * normalisasi stabil antar-pembacaan dan penunjuk lama tetap mengarah benar.
+   */
+  _dedupeIds(items) {
+    const used = new Set();
+    (items || []).forEach(it => {
+      if (!it || typeof it.id !== 'string') return;
+      let id = it.id;
+      let n = 2;
+      while (used.has(id)) {
+        const suffix = '-' + n++;
+        id = it.id.slice(0, Math.max(1, 64 - suffix.length)) + suffix;
+      }
+      used.add(id);
+      it.id = id;
+    });
+    return items;
   },
 
   /* ---- cache in-memory ---- */
@@ -131,11 +155,11 @@ const Storage = {
     const raw = Array.isArray(p.chapters) ? p.chapters : [];
     // Urutkan stabil (order, lalu posisi asli) lalu resequens 1..n
     // supaya tidak ada order kembar/berlubang hasil file eksternal.
-    const chapters = raw
+    const chapters = this._dedupeIds(raw
       .map((c, i) => this._normalizeChapter(c, i))
       .filter(Boolean)
       .sort((a, b) => (a.order - b.order) || (a._idx - b._idx))
-      .map((c, i) => { delete c._idx; c.order = i + 1; return c; });
+      .map((c, i) => { delete c._idx; c.order = i + 1; return c; }));
     return {
       id: this._safeId(p.id),
       title: typeof p.title === 'string' ? p.title.slice(0, 300) : '',
@@ -174,9 +198,9 @@ const Storage = {
   /** Bentuk kanonik untuk data apa pun (dipakai saat baca & impor). */
   _coerce(data) {
     return {
-      projects: (Array.isArray(data.projects) ? data.projects : [])
+      projects: this._dedupeIds((Array.isArray(data.projects) ? data.projects : [])
         .map(p => this._normalizeProject(p))
-        .filter(Boolean),
+        .filter(Boolean)),
       settings: this._settingsFrom(data.settings)
     };
   },
@@ -294,6 +318,30 @@ const Storage = {
     return JSON.stringify(this._read(), null, 2);
   },
 
+  /**
+   * Teks polos dari konten apa pun: buang tag HTML, lalu dekode entitas dasar.
+   * Dipakai hanya untuk statistik ringkasan (bukan untuk menyimpan/menampilkan).
+   */
+  _plainContent(content) {
+    return String(content == null ? '' : content)
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#0*39;|&apos;/gi, "'")
+      .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(Number(d)))
+      .replace(/&amp;/gi, '&');   // terakhir: "&amp;lt;" -> teks "&lt;", bukan tag
+  },
+
+  /** Jumlah kata — memakai aturan yang sama dengan aplikasi (TextUtil). */
+  _countWords(text) {
+    if (typeof TextUtil !== 'undefined' && TextUtil.countWords) return TextUtil.countWords(text);
+    const s = String(text == null ? '' : text).trim();
+    if (!s) return 0;
+    return s.split(/\s+/).filter(tok => /[\p{L}\p{N}]/u.test(tok)).length;
+  },
+
   /** Ringkasan data yang sedang tersimpan (untuk dialog konfirmasi). */
   summarizeData(data) {
     const projects = (data && Array.isArray(data.projects)) ? data.projects : [];
@@ -301,10 +349,8 @@ const Storage = {
     projects.forEach(p => {
       (Array.isArray(p.chapters) ? p.chapters : []).forEach(c => {
         chapters++;
-        // tag HTML tidak dihitung sebagai kata
-        const txt = (typeof c.content === 'string' ? c.content : '')
-          .replace(/<[^>]*>/g, ' ').trim();
-        if (txt) words += txt.split(/\s+/).length;
+        // tag & entitas HTML tidak dihitung sebagai kata; tanda baca lepas juga tidak
+        words += this._countWords(this._plainContent(c && typeof c.content === 'string' ? c.content : ''));
       });
     });
     return { projects: projects.length, chapters, words };
