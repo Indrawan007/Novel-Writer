@@ -54,7 +54,14 @@ const I18N = {
     confirmDelProj:  "Hapus proyek ini beserta semua babnya?",
     confirmDelCh:    "Hapus bab ini?",
     confirmRestore:  "Pulihkan data dari file ini?\n\nFile berisi: {projects} proyek, {chapters} bab ({words} kata).\nData saat ini: {curProjects} proyek, {curChapters} bab ({curWords} kata) — akan ditimpa.\n\nCadangan otomatis dibuat, jadi restore bisa dibatalkan dari Pengaturan.",
-    continue:        "Lanjutkan",
+    titleRequired:  "Judul tidak boleh kosong.",
+    draftKept:      "Bab ini dihapus di tab lain — tulisanmu disimpan sebagai draf. Pulihkan lewat Pengaturan.",
+    draftNone:      "Tidak ada draf yang tersimpan.",
+    draftRestored:  "Draf berhasil ditempelkan ke bab ini.",
+    draftNeedChapter:"Buka sebuah bab dulu untuk menempelkan draf.",
+    restoreDraft:   "Pulihkan draf",
+    exportNotSaved: "Isi terbaru gagal ditulis ke browser — berkas ekspor tetap memuatnya.",
+    continue:       "Lanjutkan",
     saved:           "Tersimpan",
     saving:          "Menyimpan...",
     storageFull:     "Penyimpanan browser penuh — data TIDAK tersimpan! Unduh cadangan sekarang.",
@@ -66,7 +73,6 @@ const I18N = {
     backupDone:      "Cadangan berhasil diunduh!",
     restoreDone:     "Data berhasil dipulihkan!",
     restoreFail:     "File tidak valid!",
-    noChapter:       "Tidak ada bab untuk diekspor.",
     untitled:        "Tanpa Judul",
     chapter:         "Bab",
     rename:          "Ganti Nama",
@@ -92,12 +98,8 @@ const I18N = {
     readerMode:      "Mode Baca",
     exitFocusMode:   "Keluar Mode Fokus",
     exitReaderMode:  "Keluar Mode Baca",
-    focusModeActive: "Keluar Mode Fokus (Esc)",
-    readerModeActive:"Keluar Mode Baca (Esc)",
     focusToast:      "Mode Fokus — Esc untuk keluar",
     readerToast:     "Mode Baca — Esc untuk keluar",
-    focusHint:       "Tulis tanpa distraksi",
-    readerHint:      "Baca dengan nyaman",
     shortcutFocus:   "Ctrl+Shift+F",
     shortcutReader:  "Ctrl+Shift+R",
     /* Panel format (WYSIWYG) */
@@ -161,7 +163,6 @@ const I18N = {
     chapterWords:    "Words (chapter)",
     totalWords:      "Total words",
     selectChapter:   "Select a chapter to start writing",
-    editorPlaceholder: "Start writing...\n\nOne line = one paragraph. Press Enter for a new paragraph.",
     editorPlaceholder: "Start writing...\n\nPress Enter for a new paragraph. Use the toolbar for bold, italics, and headings — no syntax to learn.",
     welcomeTitle:    "Welcome to Novel Writer",
     welcomeDesc:     "Create a new project to start writing your novel.",
@@ -178,7 +179,14 @@ const I18N = {
     confirmDelProj:  "Delete this project and all its chapters?",
     confirmDelCh:    "Delete this chapter?",
     confirmRestore:  "Restore data from this file?\n\nFile contains: {projects} projects, {chapters} chapters ({words} words).\nCurrent data: {curProjects} projects, {curChapters} chapters ({curWords} words) — will be overwritten.\n\nAn automatic backup is kept, so the restore can be undone from Settings.",
-    continue:        "Continue",
+    titleRequired:  "Title cannot be empty.",
+    draftKept:      "This chapter was deleted in another tab — your text is kept as a draft. Restore it from Settings.",
+    draftNone:      "There is no saved draft.",
+    draftRestored:  "Draft appended to this chapter.",
+    draftNeedChapter:"Open a chapter first to paste the draft.",
+    restoreDraft:   "Restore draft",
+    exportNotSaved: "Latest edits could not be saved to the browser — the exported file still contains them.",
+    continue:       "Continue",
     saved:           "Saved",
     saving:          "Saving...",
     storageFull:     "Browser storage is full — data NOT saved! Download a backup now.",
@@ -190,7 +198,6 @@ const I18N = {
     backupDone:      "Backup downloaded!",
     restoreDone:     "Data restored successfully!",
     restoreFail:     "Invalid file!",
-    noChapter:       "No chapters to export.",
     untitled:        "Untitled",
     chapter:         "Chapter",
     rename:          "Rename",
@@ -216,12 +223,8 @@ const I18N = {
     readerMode:      "Reader Mode",
     exitFocusMode:   "Exit Focus Mode",
     exitReaderMode:  "Exit Reader Mode",
-    focusModeActive: "Exit Focus Mode (Esc)",
-    readerModeActive:"Exit Reader Mode (Esc)",
     focusToast:      "Focus Mode — press Esc to exit",
     readerToast:     "Reader Mode — press Esc to exit",
-    focusHint:       "Distraction-free writing",
-    readerHint:      "Comfortable reading",
     shortcutFocus:   "Ctrl+Shift+F",
     shortcutReader:  "Ctrl+Shift+R",
     /* Format toolbar (WYSIWYG) */
@@ -264,7 +267,7 @@ function readStoredLang() {
     const d = JSON.parse(localStorage.getItem('novel-writer-data') || 'null');
     const lang = d && d.settings && d.settings.lang;
     return (lang === 'en' || lang === 'id') ? lang : 'id';
-  } catch (e) {
+  } catch {
     return 'id';
   }
 }

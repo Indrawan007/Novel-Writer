@@ -1,5 +1,5 @@
 /* Uji konsistensi statis antar-berkas (markup, i18n, ikon, SW, manifest). */
-import test from 'node:test';
+import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,6 +7,13 @@ import { execFileSync } from 'node:child_process';
 import { ROOT } from './helpers.mjs';
 
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+
+/* BUG-15: dulu tes aset Service Worker (urutan ke-4) bergantung pada berkas
+   ikon yang baru dibuat tes generator (urutan terakhir) -> clone baru selalu
+   gagal sekali. Sekarang ikon dihasilkan lebih dulu untuk seluruh berkas ini. */
+before(() => {
+  execFileSync(process.execPath, [path.join(ROOT, 'tools', 'generate-icons.js')], { stdio: 'pipe' });
+});
 const html = read('index.html');
 const i18n = read('js/i18n.js');
 const iconsJs = read('js/icons.js');
@@ -31,6 +38,14 @@ test('semua nama data-icon ada di Icons', () => {
 test('tidak ada emoji / karakter non-SVG di markup (prinsip desain)', () => {
   const emoji = html.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FF00}-\u{FFEF}]/gu) || [];
   assert.deepEqual(emoji, [], `karakter tak diinginkan: ${emoji.join(' ')}`);
+});
+
+test('BUG-13: Service Worker mem-precache seluruh ikon yang dipakai HTML', () => {
+  const htmlIcons = [...read('index.html').matchAll(/(?:href|src)="((?:icons|icon)\/?[^"]*)"/g)].map(m => m[1]);
+  for (const ic of htmlIcons) {
+    assert.ok(swJs.includes(`'${ic}'`), `aset SW belum memuat ${ic}`);
+  }
+  assert.ok(swJs.includes("'icons/apple-touch-icon.png'"), 'ikon iOS ikut di-precache');
 });
 
 test('semua aset Service Worker & manifest benar-benar ada', () => {

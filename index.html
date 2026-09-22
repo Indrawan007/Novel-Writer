@@ -167,7 +167,7 @@
       </div>
 
       <!-- Empty State (teks & aksi diisi dinamis oleh app.js sesuai kondisi) -->
-      <div id="empty-state">
+      <div id="empty-state" hidden>
         <div class="empty-icon" aria-hidden="true"><span class="icon" data-icon="feather"></span></div>
         <h2 id="empty-title" data-i18n="welcomeTitle">Selamat Datang di Novel Writer</h2>
         <p id="empty-desc" data-i18n="welcomeDesc">Buat proyek baru untuk mulai menulis novelmu.</p>
@@ -349,6 +349,10 @@
             <span class="icon" data-icon="undo" aria-hidden="true"></span>
             <span data-i18n="undoRestore">Batalkan restore terakhir</span>
           </button>
+          <button class="btn-ghost" id="btn-restore-draft" hidden>
+            <span class="icon" data-icon="undo" aria-hidden="true"></span>
+            <span data-i18n="restoreDraft">Pulihkan draf</span>
+          </button>
           <input type="file" id="inp-restore" accept=".json,application/json" hidden>
         </div>
       </div>
@@ -428,7 +432,7 @@
       <span class="hud-exit-label" data-i18n="exitImmersive">Keluar (Esc)</span>
     </button>
   </div>
-  
+
     <script src="js/i18n.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/icons.js"></script>

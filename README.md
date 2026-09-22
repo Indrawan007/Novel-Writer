@@ -26,7 +26,10 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   judul ikut terbawa ke PDF & DOCX; TXT dilumat jadi teks polos tanpa penanda)
 - **Cadangkan & pulihkan** data: konfirmasi ber-ringkasan sebelum menimpa,
   snapshot otomatis, dan **undo restore** dari Pengaturan
-- **Sinkronisasi antar-tab** (tab lain menulis → data diadopsi, ketikan lokal tidak dibuang)
+- **Draf darurat**: bila bab yang sedang ditulis dihapus tab lain, ketikan
+  disimpan sebagai draf dan bisa ditempelkan ke bab lain dari Pengaturan
+- **Sinkronisasi antar-tab** (tab lain menulis → data diadopsi; ketikan lokal
+  dipertahankan, atau diselamatkan jadi draf bila babnya ikut hilang)
 - Tema gelap/terang, ukuran font & tinggi baris bisa diatur
 - Bilingual: **Indonesia / English** (termasuk tooltip & label aksesibilitas)
 - **Aman**: isi bab melewati sanitasi allowlist ketat — hanya `p/h2/blockquote/
@@ -35,7 +38,7 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
   backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 48 kasus (Node + jsdom) + CI
+- **Test suite** 62 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -114,7 +117,7 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 51 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 62 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
@@ -123,8 +126,10 @@ flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
 sanitasi (script/handler tidak ikut hidup), keamanan restore, HUD imersif
 (kata sesi, navigasi bab, progres baca, font baca, toggle persisten), ekspor
 (TXT/DOCX menghormati format), i18n, fokus modal, urutan bab (keyboard & drag),
-sinkronisasi antar-tab, konsistensi markup↔kamus↔ikon↔SW↔manifest, serta
-jaminan **tanpa parser sintaks** di seluruh produk.
+sinkronisasi antar-tab & draf darurat, konsistensi markup↔kamus↔ikon↔SW↔manifest,
+serta jaminan **tanpa parser sintaks** di seluruh produk.
+
+Riwayat audit bug & perbaikannya tercatat di [`BUGS.md`](BUGS.md).
 
 ## Regenerasi Ikon
 
@@ -151,6 +156,33 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
 
+## Catatan Rilis v1.4.1
+
+Rilis perbaikan hasil audit menyeluruh (20 temuan — rincian di `BUGS.md`):
+
+- **Pintasan `Alt+←/→` di Mode Baca kembali hidup** — penanganannya terselip
+  di luar handler `keydown` (dan memakai variabel tak terdefinisi), sehingga
+  fitur ini sama sekali tidak pernah terpasang sejak dirilis.
+- **Fokus tidak lagi dicuri editor** saat `renderAll()` berjalan (mis. ganti
+  bahasa) sewaktu modal terbuka — focus trap tetap utuh.
+- **`Tab` tidak lagi menjebak kursor**: hanya dicegat bila indent/un-indent
+  benar-benar mengubah sesuatu; sisanya fokus bebas pindah (a11y).
+- **Hapus proyek aktif** kini mengadopsi proyek berikutnya, jadi UI dan
+  penunjuk tersimpan tidak lagi berbeda cerita.
+- **Ketikan tidak hilang diam-diam** bila bab aktif dihapus di tab lain:
+  disimpan sebagai draf darurat + peringatan, dan bisa dipulihkan dari
+  Pengaturan.
+- **Form judul** memberi pesan & penanda `aria-invalid` saat dikosongkan
+  (dulu tombol "Buat"/"Simpan" diam saja).
+- **Impor/tempel bersih**: spasi & baris baru antar tag blok tidak lagi
+  menghasilkan jeda (`class="gap"`) palsu.
+- **Statistik kata** langsung mengikuti ketikan; Mode Fokus tidak lagi
+  mem-parse ulang seluruh bab pada setiap tombol yang ditekan.
+- Lain-lain: gulung latar terkunci saat modal terbuka, ikon iOS ikut
+  di-precache Service Worker, peringatan bila ekspor/cadangan menyertakan
+  isi yang gagal ditulis, kontainer PDF tidak lagi berkedip di layar,
+  pembersihan kode mati, serta tes uji yang tidak lagi bergantung urutan.
+
 ## Catatan Rilis v1.4
 
 - **Mode Fokus & Mode Baca imersif penuh** — fullscreen otomatis saat masuk
@@ -169,7 +201,7 @@ Dev-dependency (hanya untuk pengujian): `jsdom`.
 - **Perbaikan**: judul bab yang hilang di Mode Baca dikembalikan; ekspor TXT
   seluruh novel kini mencantumkan judul tiap bab (dua-duanya sebelumnya gagal
   di test suite).
-  
+
 ## Catatan Rilis v1.3
 
 - **Editor teks berformat (WYSIWYG) menggantikan penyunting teks polos** —

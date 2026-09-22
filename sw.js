@@ -7,7 +7,7 @@
      • CDN (html2pdf/docx, lazy-load saat ekspor) -> network-first + cache fallback
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v9';
+const CACHE_NAME = 'novel-writer-v10';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.
@@ -27,7 +27,8 @@ const ASSETS = [
   'js/app.js',
   'manifest.json',
   'icons/icon-192.png',
-  'icons/icon-512.png'
+  'icons/icon-512.png',
+  'icons/apple-touch-icon.png'
 ].map((p) => BASE + p);
 
 const HOME = BASE + 'index.html';

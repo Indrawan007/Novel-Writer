@@ -145,6 +145,7 @@ const Exporter = {
     container.className = 'nw-pdf';
     container.setAttribute('aria-hidden', 'true');
     container.style.cssText = `
+      position: absolute; top: 0; left: -10000px;
       font-family: 'Georgia', 'Times New Roman', serif;
       font-size: 12pt;
       line-height: 1.8;
