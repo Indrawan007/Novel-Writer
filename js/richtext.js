@@ -71,9 +71,16 @@ const RichText = {
 
     const pushText = (text, bold, italic) => {
       if (text == null || text === '') return;
-      ensure();
       const norm = String(text).replace(/[\t\n\r\f]+/g, ' ');
       if (!norm) return;
+      // Teks yang hanya berisi spasi biasa DI ANTARA dua blok (mis. newline
+      // pada hasil tempel Word/Google Docs) tidak berarti apa-apa di HTML:
+      // abaikan saja. Dulu ia menjadi blok kosong -> paragraf berikutnya
+      // mendapat class="gap" (jeda palsu). Jeda yang sesungguhnya datang dari
+      // paragraf kosong (<p><br></p>) atau class="gap" eksplisit.
+      // nbsp tetap dihargai (indent pengguna) karena bukan spasi biasa.
+      if (!cur && !/[^ ]/.test(norm)) return;
+      ensure();
       const last = cur.runs[cur.runs.length - 1];
       if (last && last.bold === bold && last.italic === italic) last.text += norm;
       else cur.runs.push({ text: norm, bold: !!bold, italic: !!italic });
@@ -276,6 +283,23 @@ const RichText = {
   getHtml(el) {
     if (!el) return '';
     return this.sanitize(el.innerHTML);
+  },
+
+  /**
+   * Teks polos dari DOM editor — untuk hitung kata cepat tanpa parse ulang
+   * seluruh dokumen (sanitize/getHtml) pada setiap ketikan.
+   */
+  domText(el) {
+    if (!el) return '';
+    let out = '';
+    const walk = (n) => {
+      for (const c of n.childNodes) {
+        if (c.nodeType === 3) out += c.nodeValue + ' ';
+        else if (c.nodeType === 1) walk(c);
+      }
+    };
+    walk(el);
+    return out.replace(/\u00a0/g, ' ');
   },
 
   /** Penanda kosong untuk placeholder CSS. */

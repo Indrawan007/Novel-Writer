@@ -470,3 +470,165 @@ test('pengaturan imersif tersimpan dan diterapkan', async () => {
   click(w, $('#modal-settings [data-close]'));
   assert.deepEqual(w.__errors, []);
 });
+
+/* ============================================
+   Regresi — bug yang ditemukan pada audit (lihat BUGS.md)
+   ============================================ */
+
+const seedTwoProjects = () => ({
+  projects: [
+    { id: 'p1', title: 'Proyek A', author: '', description: '', chapters: [
+      { id: 'c1', title: 'Bab 1', content: '<p>satu</p>', format: 'html', order: 1, createdAt: 'x', updatedAt: 'x' }
+    ], createdAt: 'x', updatedAt: 'x' },
+    { id: 'p2', title: 'Proyek B', author: '', description: '', chapters: [
+      { id: 'c2', title: 'Bab 2', content: '<p>dua</p>', format: 'html', order: 1, createdAt: 'x', updatedAt: 'x' }
+    ], createdAt: 'x', updatedAt: 'x' }
+  ],
+  settings: { theme: 'light', fontSize: 18, lineHeight: 1.8, autoSaveDelay: 1000, lang: 'id', lastProject: 'p1', lastChapter: 'c1' }
+});
+
+test('BUG-01: Alt+Panah di Mode Baca benar-benar memindah bab', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-reader'));
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c1');
+
+  key(w, w.document, { key: 'ArrowRight', altKey: true });
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2', 'Alt+→ = bab berikutnya');
+  assert.equal($('#reader-view').querySelector('h1').textContent, 'Bab 2');
+
+  key(w, w.document, { key: 'ArrowLeft', altKey: true });
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c1', 'Alt+← = bab sebelumnya');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('BUG-02: ganti bahasa tidak mencuri fokus dari modal Pengaturan', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-settings'));
+  await wait(80);                       // openModal memindahkan fokus setelah ~40 md
+  assert.ok($('#modal-settings').contains(w.document.activeElement), 'fokus mula-mula di dalam modal');
+
+  const sel = $('#set-lang');
+  sel.value = 'en';
+  sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await wait(30);
+
+  assert.ok($('#modal-settings').contains(w.document.activeElement),
+    'fokus TETAP di dalam modal (tidak dilompatkan ke editor)');
+  assert.equal($('#btn-new-project').title, 'New Project', 'bahasa tetap berganti');
+  assert.ok($('body').classList.contains('modal-open'), 'penanda modal masih aktif');
+});
+
+test('BUG-03: Tab hanya dicegat bila indent bekerja (kursor tidak terjebak)', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  ed.focus();
+  ed.innerHTML = '<p>baris tanpa indent</p>';
+  const t = ed.querySelector('p').firstChild;
+  select(w, t, 0, t, 5);
+
+  const tab1 = new w.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+  ed.dispatchEvent(tab1);
+  assert.equal(tab1.defaultPrevented, true, 'indent berhasil -> Tab dicegat');
+
+  const untab1 = new w.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+  ed.dispatchEvent(untab1);
+  assert.equal(untab1.defaultPrevented, true, 'un-indent berhasil -> Tab dicegat');
+
+  const untab2 = new w.KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+  ed.dispatchEvent(untab2);
+  assert.equal(untab2.defaultPrevented, false,
+    'tidak ada lagi indent -> Tab dibiarkan supaya fokus bisa pindah (a11y)');
+});
+
+test('BUG-04: hapus proyek aktif -> UI & penunjuk tersimpan sinkron', async () => {
+  const { w, $, S } = await createApp({ seed: seedTwoProjects() });
+  const del = [...$('#project-list').querySelectorAll('[data-del-proj]')].find(b => b.dataset.delProj === 'p1');
+  click(w, del);
+  click(w, $('#btn-confirm-yes'));
+  await wait(30);
+
+  assert.equal(S.getProjects().length, 1);
+  assert.equal(w.NovelWriter.state.activeProjectId, S.getSettings().lastProject,
+    'UI mengikuti penunjuk tersimpan (bukan null)');
+  assert.equal(w.NovelWriter.state.activeProjectId, 'p2');
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2', 'bab pertama proyek berikutnya langsung terbuka');
+  assert.equal($('#empty-state').hidden, true, 'tidak nyangkut di empty-state');
+  assert.equal($('#toolbar-title').textContent, 'Bab 2');
+});
+
+test('BUG-05: bab aktif dihapus tab lain -> draf disimpan & bisa dipulihkan', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'ketikan yang sangat berharga');
+
+  const dariTabLain = JSON.stringify({
+    projects: [{ id: 'p1', title: 'Novel Uji', author: '', description: '', chapters: [
+      { id: 'c9', title: 'Bab lain', content: '<p>isi</p>', format: 'html', order: 1, createdAt: 'x', updatedAt: 'x' }
+    ], createdAt: 'x', updatedAt: 'x' }],
+    settings: { theme: 'light', fontSize: 18, lineHeight: 1.8, autoSaveDelay: 1000, lang: 'id', lastProject: 'p1', lastChapter: null }
+  });
+  w.localStorage.setItem('novel-writer-data', dariTabLain);
+  w.dispatchEvent(new w.StorageEvent('storage', { key: 'novel-writer-data', newValue: dariTabLain }));
+
+  assert.equal(S.hasDraft(), true, 'ketikan disimpan sebagai draf, bukan dibuang diam-diam');
+  assert.equal($('#toast').hidden, false);
+  assert.ok($('#toast').classList.contains('toast-error'), 'pengguna diperingatkan');
+
+  // pulihkan ke bab yang dibuka
+  click(w, $('#chapter-list li[data-id="c9"]'));
+  click(w, $('#btn-settings'));
+  assert.equal($('#btn-restore-draft').hidden, false, 'tombol pulihkan draf muncul');
+  click(w, $('#btn-restore-draft'));
+  assert.equal(S.hasDraft(), false, 'draf dipakai sekali lalu dibersihkan');
+  await wait(1300);
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c9');
+  assert.match(ch.content, /ketikan yang sangat berharga/, 'draf menempel di bab tujuan');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('BUG-06: judul kosong -> pesan + aria-invalid (bukan diam saja)', async () => {
+  const { w, $, S } = await createApp();
+  click(w, $('#btn-new-project'));
+  $('#inp-proj-title').value = '   ';
+  click(w, $('#btn-create-project'));
+
+  assert.equal($('#modal-project').hidden, false, 'modal tetap terbuka');
+  assert.equal(S.getProjects().length, 0, 'proyek tidak jadi dibuat');
+  assert.equal($('#inp-proj-title').getAttribute('aria-invalid'), 'true');
+  assert.equal($('#toast').hidden, false, 'ada pesan untuk pengguna');
+  assert.match($('#toast').textContent, /kosong/i);
+
+  // mengetik menghapus penanda error
+  $('#inp-proj-title').value = 'Judul Baru';
+  $('#inp-proj-title').dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert.equal($('#inp-proj-title').hasAttribute('aria-invalid'), false);
+
+  // rename bab/proyek memakai aturan yang sama
+  click(w, $('#btn-create-project'));
+  assert.equal(S.getProjects()[0].title, 'Judul Baru');
+});
+
+test('BUG-12: statistik kata mengikuti ketikan (tanpa menunggu auto-save)', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'satu dua tiga empat lima');
+  assert.equal($('#stat-chapter').textContent, '5', 'langsung terhitung saat mengetik');
+  assert.equal($('#stat-total').textContent, '5');
+  await wait(1300);
+  assert.equal($('#stat-chapter').textContent, '5', 'tetap konsisten setelah tersimpan');
+});
+
+test('BUG-16: cadangkan saat penyimpanan gagal -> berkas tetap dibuat + peringatan', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  let downloaded = null;
+  w.NW.Exporter.download = (blob, name) => { downloaded = name; };
+  type(w, $('#editor'), 'teks yang belum tersimpan');
+  const restore = breakStorageSetItem(w);
+  click(w, $('#btn-settings'));
+  click(w, $('#btn-backup'));
+  await wait(30);
+
+  assert.match(String(downloaded), /^novel-writer-backup-\d{4}-\d{2}-\d{2}\.json$/,
+    'berkas cadangan tetap dihasilkan');
+  assert.equal($('#toast').hidden, false);
+  assert.ok($('#toast').classList.contains('toast-error'), 'pengguna diperingatkan, bukan ditelan');
+  restore();
+});

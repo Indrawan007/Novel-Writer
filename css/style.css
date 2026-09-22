@@ -412,6 +412,9 @@ html, body {
 }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* kunci gulung halaman di balik modal (kelas dipasang app.js) */
+body.modal-open { overflow: hidden; }
+
 .modal {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -465,6 +468,8 @@ html, body {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+.modal input[aria-invalid="true"],
+.modal textarea[aria-invalid="true"] { border-color: var(--danger); }
 
 /* Slider */
 .custom-range {

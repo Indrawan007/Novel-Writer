@@ -12,6 +12,7 @@
 
 const DB_KEY = 'novel-writer-data';
 const SNAPSHOT_KEY = 'novel-writer-data-prev'; // cadangan otomatis sebelum restore
+const DRAFT_KEY = 'novel-writer-draft';        // draf darurat: ketikan tanpa bab tujuan
 
 const Storage = {
   _cache: null,
@@ -179,6 +180,44 @@ const Storage = {
         .filter(Boolean),
       settings: this._settingsFrom(data.settings)
     };
+  },
+
+  /* ---- Draf darurat ---- */
+
+  /**
+   * Simpan draf ketikan yang kehilangan bab tujuannya (mis. bab dihapus di
+   * tab lain) supaya tulisan tidak lenyap tanpa jejak.
+   */
+  saveDraft(html) {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        html: String(html || ''),
+        at: new Date().toISOString()
+      }));
+      return true;
+    } catch (e) {
+      console.warn('Draf gagal disimpan:', e);
+      return false;
+    }
+  },
+
+  hasDraft() {
+    try { return !!localStorage.getItem(DRAFT_KEY); } catch { return false; }
+  },
+
+  /** Ambil sekaligus hapus draf (sekali pakai). */
+  takeDraft() {
+    let raw = null;
+    try { raw = localStorage.getItem(DRAFT_KEY); } catch { return null; }
+    if (!raw) return null;
+    try {
+      const d = JSON.parse(raw);
+      localStorage.removeItem(DRAFT_KEY);
+      return (d && typeof d.html === 'string' && d.html) ? d : null;
+    } catch (e) {
+      console.warn('Draf rusak:', e);
+      return null;
+    }
   },
 
   /* ---- Query ---- */

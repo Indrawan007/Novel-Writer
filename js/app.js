@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
 
   // ============ STATE ============
   let activeProjectId = Storage.getSettings().lastProject;
@@ -20,6 +20,7 @@
   let autoSaveDelay = Storage.getSettings().autoSaveDelay || 1000;
   let lastFocused = null;   // elemen pemanggil modal (fokus dikembalikan saat tutup)
   let dirty = false;        // ada ketikan yang belum tersimpan
+  let wordsBase = null;     // cache total kata bab non-aktif (lihat updateStats)
   // ---- imersif ----
   let typewriterOn = Storage.getSettings().typewriter !== false;
   let paraFocusOn = Storage.getSettings().paraFocus !== false;
@@ -131,6 +132,22 @@
     return false;
   }
 
+  /**
+   * Input judul wajib diisi. Dulu tombol "Buat"/"Simpan" diam saja sehingga
+   * tampak seperti aplikasi macet — sekarang: fokus kembali + toast + a11y.
+   */
+  function rejectEmptyTitle(inp) {
+    if (inp) {
+      inp.setAttribute('aria-invalid', 'true');
+      try { inp.focus(); } catch {}
+    }
+    toast(t('titleRequired'), 3000, 'error');
+  }
+
+  function clearTitleError(inp) {
+    if (inp) inp.removeAttribute('aria-invalid');
+  }
+
   // ============ MODAL ============
   const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
@@ -228,6 +245,7 @@
   }
 
   function renderChapters() {
+    invalidateWordsBase();
     const proj = Storage.getProject(activeProjectId);
     if (!proj) {
       if (dom.chapterSec) dom.chapterSec.hidden = true;
@@ -302,7 +320,7 @@
       if (dom.btnFocus) dom.btnFocus.hidden = true;
       if (dom.btnReader) dom.btnReader.hidden = true;
       // keluar dari mode immersive jika tidak ada bab
-      if (isFocusMode || isReaderMode) { exitFocusMode(false); exitReaderMode(false); }
+      if (isFocusMode || isReaderMode) { exitFocusMode(); exitReaderMode(); }
       return;
     }
 
@@ -315,7 +333,8 @@
 
     // MODE BACA — tampilkan bab sebagai halaman buku (judul + paragraf)
     if (isReaderMode) {
-      if (dom.editor) dom.editor.hidden = true;if (dom.formatBar) dom.formatBar.hidden = true;
+      if (dom.editor) dom.editor.hidden = true;
+      if (dom.formatBar) dom.formatBar.hidden = true;
       if (dom.reader) dom.reader.hidden = false;
       renderReader(ch);
       try { if (dom.editorWrap) dom.editorWrap.scrollTop = 0; if (dom.reader) dom.reader.scrollTop = 0; } catch {}
@@ -336,8 +355,9 @@
         RichText.setContent(dom.editor, keep, 'html');
       } else {
         RichText.setContent(dom.editor, ch.content || '', ch.format);
-        // Kursor di akhir konten — posisi lama milik bab sebelumnya
-        RichText.focusEnd(dom.editor);
+        // Kursor di akhir konten — posisi lama milik bab sebelumnya.
+        // Jangan pernah mencuri fokus dari modal yang sedang terbuka.
+        if (!modalOpen()) RichText.focusEnd(dom.editor);
       }
       if (isFocusMode) updateFocusCurrent();
     }
@@ -365,18 +385,34 @@
     }
   }
 
+  /**
+   * Total kata bab-bab SELAIN bab aktif (cache).
+   * Dihitung ulang hanya bila data berubah — bukan pada setiap ketikan —
+   * sehingga pembaruan statistik langsung tetap murah untuk novel besar.
+   */
+  function invalidateWordsBase() { wordsBase = null; }
+
+  function wordsBaseOf(chapters, activeCh) {
+    if (wordsBase == null) {
+      wordsBase = (chapters || []).reduce(
+        (s, c) => s + (c === activeCh ? 0 : wordCount(c.content || '', c.format)), 0);
+    }
+    return wordsBase;
+  }
+
   function updateStats() {
     const proj = Storage.getProject(activeProjectId);
     if (!proj) {
       if (dom.statChapter) dom.statChapter.textContent = '0';
       if (dom.statTotal) dom.statTotal.textContent = '0';
+      updateFocusHud();
       return;
     }
     const chapters = proj.chapters || [];
     const ch = chapters.find(c => c.id === activeChapterId);
-    if (dom.statChapter) dom.statChapter.textContent = nf(ch ? wordCount(ch.content || '', ch.format) : 0);
-    const total = chapters.reduce((s, c) => s + wordCount(c.content || '', c.format), 0);
-    if (dom.statTotal) dom.statTotal.textContent = nf(total);
+    const cur = ch ? chapterWords(ch) : 0;
+    if (dom.statChapter) dom.statChapter.textContent = nf(cur);
+    if (dom.statTotal) dom.statTotal.textContent = nf(wordsBaseOf(chapters, ch) + cur);
     updateFocusHud();
   }
 
@@ -406,7 +442,8 @@
     const titleInp = $('#inp-proj-title');
     if (!titleInp) return;
     const title = titleInp.value.trim();
-    if (!title) { titleInp.focus(); return; }
+    if (!title) { rejectEmptyTitle(titleInp); return; }
+    clearTitleError(titleInp);
     const now = new Date().toISOString();
     const proj = {
       id: Storage.uid(),
@@ -432,10 +469,19 @@
     showConfirm(t('confirmDelProj'), () => {
       persist(Storage.deleteProject(id));
       if (activeProjectId === id) {
-        activeProjectId = null;
-        activeChapterId = null;
+        // Adopsi penunjuk yang sudah diperbaiki Storage (proyek pertama yang
+        // tersisa) supaya UI dan data tersimpan tidak berbeda cerita.
+        const s = Storage.repairPointers();
+        activeProjectId = s.lastProject || null;
+        const proj = activeProjectId ? Storage.getProject(activeProjectId) : null;
+        const first = proj ? sortedChapters(proj)[0] : null;
+        activeChapterId = first ? first.id : null;
+        dirty = false;
+        persist(Storage.saveSettings({
+          lastProject: activeProjectId,
+          lastChapter: activeChapterId
+        }));
       }
-      Storage.repairPointers();
       renderAll();
     });
   }
@@ -468,7 +514,8 @@
     const inp = $('#inp-rename-proj');
     if (!inp) return;
     const title = inp.value.trim();
-    if (!title) { inp.focus(); return; }
+    if (!title) { rejectEmptyTitle(inp); return; }
+    clearTitleError(inp);
     const proj = Storage.getProject(renameTarget.id);
     if (proj) {
       proj.title = title.slice(0, 300);
@@ -549,7 +596,8 @@
     const inp = $('#inp-rename-ch');
     if (!inp) return;
     const title = inp.value.trim();
-    if (!title) { inp.focus(); return; }
+    if (!title) { rejectEmptyTitle(inp); return; }
+    clearTitleError(inp);
     const proj = Storage.getProject(activeProjectId);
     const ch = proj?.chapters?.find(c => c.id === renameTarget.id);
     if (ch) {
@@ -651,6 +699,7 @@
   function onTouchDragStart(e) {
     if (e.pointerType === 'mouse') return;              // biar DnD native yang menangani
     if (e.target.closest('button')) return;             // jangan ganggu rename/hapus
+    if (touchDrag) cancelTouchDrag();                   // cegah timer/listener bocor
     const li = e.currentTarget;
     const startY = e.clientY;
     touchDrag = { li, id: li.dataset.id, startY, active: false, pointerId: e.pointerId };
@@ -743,7 +792,8 @@
   function markDirty() {
     dirty = true;
     RichText.syncEmpty(dom.editor);
-    if (isFocusMode) { updateFocusHud(); updateFocusCurrent(); }
+    updateStats();               // ringan: dihitung dari DOM, bukan parse ulang
+    if (isFocusMode) updateFocusCurrent();
     autoSave();
   }
 
@@ -767,6 +817,7 @@
     const ok = Storage.saveProject(proj);
     if (ok) {
       dirty = false;
+      invalidateWordsBase();
       updateStats();
       if (!o.silent) showSaving();
     } else {
@@ -858,8 +909,13 @@
   function handleTab(e) {
     const ed = dom.editor;
     if (!ed) return;
-    e.preventDefault();
-    if (RichText.indent(ed, e.shiftKey ? -1 : 1)) markDirty();
+    // Tab HANYA dicegat bila indent/un-indent benar-benar mengubah sesuatu.
+    // Bila tidak (mis. tidak ada blok tersentuh), biarkan browser memindahkan
+    // fokus — bila tidak, pengguna keyboard terjebak di dalam editor.
+    if (RichText.indent(ed, e.shiftKey ? -1 : 1)) {
+      e.preventDefault();
+      markDirty();
+    }
   }
 
   // ============ MODE FOKUS & MODE BACA ============
@@ -1050,7 +1106,18 @@
     const ch = proj?.chapters?.find(c => c.id === activeChapterId);
     if (!ch) return 0;
     if (dirty && dom.editor && !dom.editor.hidden) {
-      try { return RichText.wordCount(RichText.getHtml(dom.editor), 'html'); } catch {}
+      // Hitung dari DOM yang sudah ada — jauh lebih murah daripada
+      // RichText.getHtml() yang mem-parse ulang seluruh bab setiap ketikan.
+      try { return TextUtil.countWords(RichText.domText(dom.editor)); } catch {}
+    }
+    return wordCount(ch.content || '', ch.format);
+  }
+
+  /** Kata sebuah bab: ketikan yang belum tersimpan ikut dihitung bila `dirty`. */
+  function chapterWords(ch) {
+    if (!ch) return 0;
+    if (dirty && ch.id === activeChapterId && dom.editor && !dom.editor.hidden) {
+      return liveChapterWords();
     }
     return wordCount(ch.content || '', ch.format);
   }
@@ -1185,7 +1252,7 @@
 
   function enterFocusMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
-    if (isReaderMode) exitReaderMode(false);
+    if (isReaderMode) exitReaderMode();
     if (isFocusMode) return;
     saveCurrentChapter({ silent: true });
     isFocusMode = true;
@@ -1205,10 +1272,9 @@
     if (!hintShown.focus) { hintShown.focus = true; toast(t('focusToast'), 1800); }
     setTimeout(() => { try { dom.editor?.focus(); } catch {} updateFocusCurrent(); }, 80);
   }
-  // showToast dipertahankan demi kompatibilitas; keluar selalu hening.
-  function exitFocusMode(showToast) {
+  // Keluar Mode Fokus selalu hening (petunjuk hanya sekali per sesi).
+  function exitFocusMode() {
     if (!isFocusMode) return;
-    void showToast;
     isFocusMode = false;
     saveCurrentChapter({ silent: true });
     clearTimeout(idleTimer);
@@ -1231,7 +1297,7 @@
 
   function enterReaderMode() {
     if (!activeChapterId) { toast(t('selectChapter')); return; }
-    if (isFocusMode) exitFocusMode(false);
+    if (isFocusMode) exitFocusMode();
     if (isReaderMode) return;
     saveCurrentChapter({ silent: true });
     isReaderMode = true;
@@ -1247,9 +1313,8 @@
     pokeImmersive();
     if (!hintShown.reader) { hintShown.reader = true; toast(t('readerToast'), 1800); }
   }
-  function exitReaderMode(showToast) {
+  function exitReaderMode() {
     if (!isReaderMode) return;
-    void showToast;
     isReaderMode = false;
     clearTimeout(idleTimer);
     clearTimeout(peekTimer);
@@ -1376,12 +1441,16 @@
 
   // ============ BACKUP / RESTORE ============
   function backupData() {
-    flushNow();                                   // pastikan isi terbaru ikut
+    // Isi terbaru di-flush lebih dulu. Bila gagal menulis ke browser, berkas
+    // tetap dibuat (memuat cache in-memory) tetapi pengguna diperingatkan —
+    // jangan sampai ia mengira datanya sudah aman tersimpan.
+    const flushed = flushNow();
     const json = Storage.exportAll();
     const blob = new Blob([json], { type: 'application/json' });
     const date = new Date().toISOString().slice(0, 10);
     Exporter.download(blob, `novel-writer-backup-${date}.json`);
-    toast(t('backupDone'));
+    if (flushed) toast(t('backupDone'));
+    else toast(t('exportNotSaved'), 8000, 'error');
   }
 
   /** Terapkan ulang seluruh settings + render setelah data diganti total. */
@@ -1408,6 +1477,7 @@
     clearTimeout(idleTimer);
     releaseImmersiveFullscreen();
     dirty = false;
+    invalidateWordsBase();
     autoSaveDelay = s.autoSaveDelay || 1000;
     typewriterOn = s.typewriter !== false;
     paraFocusOn = s.paraFocus !== false;
@@ -1421,6 +1491,11 @@
     setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
     applySidebarLabels();
+    // state turunan ikut disetel ulang: penghitung sesi & tombol draf/undo
+    focusStartWords = liveChapterWords();
+    updateFocusHud();
+    updateUndoRestoreButton();
+    updateRestoreDraftButton();
   }
 
   function updateUndoRestoreButton() {
@@ -1440,7 +1515,7 @@
       let incoming;
       try {
         incoming = Storage.summarizeJson(text);
-      } catch (err) {
+      } catch {
         toast(t('restoreFail'), 4000, 'error');
         return;
       }
@@ -1451,7 +1526,7 @@
       }), () => {
         let ok = false;
         try { ok = Storage.importAll(text); }
-        catch (err) { console.warn('Restore gagal:', err); }
+        catch { ok = false; }
         if (!ok) {
           toast(Storage.lastError() === 'quota' ? t('storageFull') : t('restoreFail'), 8000, 'error');
           return;
@@ -1470,6 +1545,7 @@
     if (!Storage.restoreSnapshot()) { toast(t('undoRestoreFail'), 4000, 'error'); return; }
     afterDataReplaced();
     updateUndoRestoreButton();
+    updateRestoreDraftButton();
     toast(t('undoRestoreDone'), 3000);
   }
 
@@ -1505,12 +1581,52 @@
     if (e.key !== DB_KEY) return;
     const keep = (dirty && dom.editor && !dom.editor.hidden) ? RichText.getHtml(dom.editor) : null;
     afterDataReplaced();
+    let kept = false;
     if (keep != null && dom.editor) {
-      RichText.setContent(dom.editor, keep, 'html');
-      dirty = true;
-      autoSave();
+      const proj = Storage.getProject(activeProjectId);
+      const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+      if (ch) {
+        RichText.setContent(dom.editor, keep, 'html');
+        dirty = true;
+        autoSave();
+      } else {
+        // Bab yang sedang ditulis lenyap di tab lain — simpan draf & beri tahu.
+        // (Dulu: teks tetap tampil di editor lalu hilang tanpa peringatan.)
+        Storage.saveDraft(keep);
+        kept = true;
+      }
     }
-    toast(t('syncedFromOtherTab'), 2500);
+    updateRestoreDraftButton();
+    // Peringatan draf jangan ditimpa toast "tersinkron" yang biasa saja.
+    if (kept) toast(t('draftKept'), 9000, 'error');
+    else toast(t('syncedFromOtherTab'), 2500);
+  }
+
+  /** Tombol "Pulihkan draf" hanya tampil bila ada draf tersimpan. */
+  function updateRestoreDraftButton() {
+    const btn = $('#btn-restore-draft');
+    if (btn) btn.hidden = !Storage.hasDraft();
+  }
+
+  /** Tempelkan draf darurat ke akhir bab yang sedang dibuka. */
+  function restoreDraft() {
+    const draft = Storage.takeDraft();
+    if (!draft) { toast(t('draftNone'), 3000); updateRestoreDraftButton(); return; }
+    const proj = Storage.getProject(activeProjectId);
+    const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+    if (!ch) {                                  // kembalikan, jangan dibuang
+      Storage.saveDraft(draft.html);
+      toast(t('draftNeedChapter'), 4000, 'error');
+      updateRestoreDraftButton();
+      return;
+    }
+    if (!dom.editor) return;
+    RichText.setContent(dom.editor, RichText.getHtml(dom.editor) + draft.html, 'html');
+    dirty = true;
+    markDirty();
+    updateRestoreDraftButton();
+    toast(t('draftRestored'), 3000);
+    try { dom.editor.focus(); } catch {}
   }
 
   // ============ EVENTS ============
@@ -1652,8 +1768,10 @@
         const fmt = btn.dataset.format;
         if (fmt !== 'txt' && fmt !== 'pdf' && fmt !== 'docx') return;
 
-        // Pastikan konten terbaru ikut ter-ekspor (mengisi jeda auto-save)
-        flushNow();
+        // Pastikan konten terbaru ikut ter-ekspor (mengisi jeda auto-save).
+        // Bila gagal menulis ke browser, berkas tetap memuatnya dari cache
+        // in-memory — tetapi pengguna diberi tahu di akhir.
+        const flushed = flushNow();
 
         const isAsync = fmt === 'pdf' || fmt === 'docx';
         if (isAsync) {
@@ -1668,8 +1786,9 @@
               ? await Exporter.toPDF(scope, activeProjectId, activeChapterId)
               : await Exporter.toDocx(scope, activeProjectId, activeChapterId);
           if (!isAsync && ok) closeModal();
-          if (ok) toast(t('exported'));
-          else toast(t('exportEmpty'), 3000, 'error');
+          if (!ok) toast(t('exportEmpty'), 3000, 'error');
+          else if (flushed) toast(t('exported'));
+          else toast(t('exportNotSaved'), 8000, 'error');
         } catch (err) {
           console.error('Export error:', err);
           if (err && err.code === 'lib') toast(t('exportLibFail'), 8000, 'error');
@@ -1692,6 +1811,7 @@
       setBox('#set-typewriter', s.typewriter !== false);
       setBox('#set-parafocus', s.paraFocus !== false);
       updateUndoRestoreButton();
+      updateRestoreDraftButton();
       openModal('modal-settings');
     });
 
@@ -1751,16 +1871,15 @@
     $('#btn-backup')?.addEventListener('click', backupData);
     $('#btn-restore')?.addEventListener('click', () => $('#inp-restore')?.click());
     $('#btn-undo-restore')?.addEventListener('click', undoRestore);
+    $('#btn-restore-draft')?.addEventListener('click', restoreDraft);
+    // penanda "judul wajib diisi" hilang begitu pengguna mengetik
+    ['#inp-proj-title', '#inp-rename-proj', '#inp-rename-ch'].forEach(sel => {
+      $(sel)?.addEventListener('input', (e) => clearTitleError(e.currentTarget));
+    });
     $('#inp-restore')?.addEventListener('change', (e) => {
       if (e.target.files[0]) requestRestore(e.target.files[0]);
       e.target.value = '';
     });
-    if (isReaderMode && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        e.preventDefault();
-        gotoReaderChapter(e.key === 'ArrowRight' ? 1 : -1);
-        return;
-      }
-
     $$('[data-close]').forEach(btn => btn.addEventListener('click', closeModal));
     dom.modalOverlay?.addEventListener('click', (e) => {
       if (e.target === dom.modalOverlay) closeModal();
@@ -1790,6 +1909,13 @@
       if (e.key === 'F9' && !mod) { e.preventDefault(); toggleFocusMode(); return; }
       if (e.key === 'F10' && !mod) { e.preventDefault(); toggleReaderMode(); return; }
 
+      // Mode Baca: Alt+Panah = bab sebelum/sesudah
+      if (isReaderMode && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        gotoReaderChapter(e.key === 'ArrowRight' ? 1 : -1);
+        return;
+      }
+
       if (e.key === 'Escape') {
         if (modalOpen()) closeModal();
         else if (isFocusMode) exitFocusMode();
@@ -1815,7 +1941,6 @@
 
     // ---- Tab lain menulis data ----
     window.addEventListener('storage', onExternalStorage);
-  }
 
     // ---- Aktivitas pengguna saat imersif: tampilkan chrome + intip toolbar ----
     document.addEventListener('mousemove', (e) => {
@@ -1849,11 +1974,12 @@
       immersiveFullscreen = false;
       // Esc bawaan browser keluar dari fullscreen duluan (keydown tak sampai):
       // ikut keluar dari mode imersif agar tidak nyangkut setengah jalan.
-      if (isFocusMode) exitFocusMode(false);
-      else if (isReaderMode) exitReaderMode(false);
+      if (isFocusMode) exitFocusMode();
+      else if (isReaderMode) exitReaderMode();
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  }
 
   // ============ REGISTER PWA SERVICE WORKER ============
   function registerServiceWorker() {
@@ -1908,6 +2034,7 @@
     setSidebarCollapsed(s.sidebarCollapsed === true, false);
     renderAll();
     bindEvents();
+    updateRestoreDraftButton();
     // sinkronkan label sidebar setelah render awal
     applySidebarLabels();
     // saat keluar dari mobile, tutup drawer dan refresh label

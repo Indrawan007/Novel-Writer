@@ -7,7 +7,7 @@
 
 ## Metode
 
-1. `npm test` (51 kasus, Node 22 + jsdom) — dijalankan ±12 kali.
+1. `npm test` (51 kasus pada saat audit, Node 22 + jsdom) — dijalankan ±12 kali.
 2. ESLint 9 dengan aturan `no-undef`, `no-dupe-keys`, `no-unreachable`, dll.
 3. Pemeriksaan silang statis: id HTML ↔ JS, kunci i18n ↔ kamus, `data-icon` ↔ `Icons`,
    aset SW/manifest ↔ berkas nyata, kelas CSS ↔ markup/JS, variabel CSS.
@@ -17,18 +17,22 @@
 
 ## Ringkasan
 
-| Keparahan | Jumlah | ID |
-|---|---|---|
-| Kritis | 0 | — |
-| Tinggi | 1 | BUG-01 |
-| Sedang | 5 | BUG-02 … BUG-06 |
-| Rendah | 13 | BUG-07 … BUG-19 |
-| Kosmetik / kode mati | 1 | BUG-20 |
-| **Total** | **20** | |
+| Keparahan | Jumlah | ID | Status |
+|---|---|---|---|
+| Kritis | 0 | — | — |
+| Tinggi | 1 | BUG-01 | ✅ |
+| Sedang | 5 | BUG-02 … BUG-06 | ✅ |
+| Rendah | 13 | BUG-07 … BUG-19 | ✅ |
+| Kosmetik / kode mati | 1 | BUG-20 | ✅ |
+| **Total** | **20** | | **20/20 diperbaiki** |
 
 Tidak ada bug yang merusak data secara permanen pada alur utama, tetapi ada
 **satu fitur yang benar-benar mati** (BUG-01) dan **beberapa jalur kehilangan
 tulisan / jebakan fokus** (BUG-03, BUG-05).
+
+> **Pembaruan (v1.4.1)** — seluruh 20 temuan sudah diperbaiki. Jumlah kasus uji
+> naik 51 → 62 (regresi untuk BUG-01…06, 09, 11, 12, 13, 15, 16). Rincian tiap
+> perbaikan ada di baris **Status** masing-masing entri di bawah.
 
 ---
 
@@ -38,6 +42,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:1758-1763` (di dalam `bindEvents()`, di luar semua handler)
 - **Keparahan:** Tinggi
+- **Status:** ✅ Diperbaiki (v1.4.1) — blok yatim dipindahkan ke dalam handler `document.addEventListener('keydown', …)`; tes “BUG-01: Alt+Panah di Mode Baca benar-benar memindah bab”.
 - **Bukti:**
 
   ```js
@@ -72,6 +77,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:292-346` (`renderEditor()` → `RichText.focusEnd(dom.editor)` pada baris 340)
 - **Keparahan:** Sedang
+- **Status:** ✅ Diperbaiki (v1.4.1) — `RichText.focusEnd()` dilewati bila `modalOpen()` benar (`js/app.js`, `renderEditor`).
 - **Dampak:** `renderAll()` dipanggil dari beberapa tempat, termasuk penggantian
   bahasa di Pengaturan (`js/app.js:1698-1706`) dan sinkronisasi antar-tab
   (`onExternalStorage`). Karena `renderEditor()` selalu memanggil `focusEnd()`,
@@ -91,6 +97,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:858-864` (`handleTab`)
 - **Keparahan:** Sedang
+- **Status:** ✅ Diperbaiki (v1.4.1) — `handleTab()` memanggil `preventDefault()` hanya bila `RichText.indent()` mengembalikan `true`.
 - **Bukti:**
 
   ```js
@@ -118,6 +125,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:431-441` (`deleteProject`)  ↔ `js/storage.js:209-217` (`Storage.deleteProject`)
 - **Keparahan:** Sedang
+- **Status:** ✅ Diperbaiki (v1.4.1) — `deleteProject()` mengadopsi hasil `Storage.repairPointers()` lalu membuka bab pertama proyek berikutnya (sama seperti `selectProject`).
 - **Dampak:** `Storage.deleteProject()` mengalihkan `settings.lastProject` ke
   proyek pertama yang tersisa, sedangkan `deleteProject()` di app hanya
   menyetel `activeProjectId = null`. Maka sesi berjalan menampilkan empty-state
@@ -135,6 +143,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:1504-1515` (`onExternalStorage`) + `js/app.js:754-780` (`saveCurrentChapter`)
 - **Keparahan:** Sedang
+- **Status:** ✅ Diperbaiki (v1.4.1) — ditambah `Storage.saveDraft/hasDraft/takeDraft()` + tombol “Pulihkan draf” di Pengaturan + toast error; ketikan tak lagi hilang diam-diam.
 - **Dampak:** saat tab lain menulis, `onExternalStorage()` mengembalikan ketikan
   lokal ke editor dan menandai `dirty = true`. Jika bab yang sedang dibuka
   **dihapus** di tab lain, `saveCurrentChapter()` tidak menemukan bab
@@ -154,6 +163,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:409` (`createProject`), `471` (`saveRenameProject`), `552` (`saveRenameChapter`)
 - **Keparahan:** Sedang (UX)
+- **Status:** ✅ Diperbaiki (v1.4.1) — ditambah `rejectEmptyTitle()`/`clearTitleError()`: toast + `aria-invalid="true"` + garis tepi merah di CSS.
 - **Dampak:** pengguna mengisi form, menekan “Buat”/“Simpan” (atau Enter) dengan
   judul kosong/berisi spasi → modal tetap terbuka, **tidak ada toast, tidak ada
   pesan error, tidak ada penanda `aria-invalid`**. Terlihat seperti aplikasi
@@ -170,6 +180,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/i18n.js:164-165`
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — kunci ganda dihapus; kamus ID/EN kini 120 kunci tanpa duplikasi.
 - **Bukti:**
 
   ```js
@@ -190,6 +201,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:148` & `162` ↔ `css/style.css` (tidak ada selektor `.modal-open`)
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — ditambah `body.modal-open { overflow: hidden; }` di `css/style.css`.
 - **Dampak:** latar belakang masih bisa digulung/di-scroll saat modal terbuka
   (dan pada perangkat sentuh, gesture ikut menggulung halaman di balik overlay).
 - **Saran:** tambahkan `body.modal-open { overflow: hidden; }` (atau hapus kelas
@@ -201,6 +213,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/richtext.js:72-80` (`pushText`) dan `58-68` (`endBlock`)
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `pushText()` mengabaikan teks yang hanya berisi spasi biasa di antara dua blok (nbsp tetap dihargai).
 - **Bukti:** `sanitize('<p>a</p>\n\n<p>b</p>')` → `'<p>a</p><p class="gap">b</p>'`
   (seharusnya `<p>a</p><p>b</p>`).
   Teks murni ` "\n\n" ` dinormalisasi menjadi `" "` → dianggap run yang berisi →
@@ -225,6 +238,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
   `webkitfullscreenchange`) — menjorok ke dalam seolah masih di dalam
   `bindEvents()`, padahal fungsi sudah ditutup di baris 1817.
 - **Keparahan:** Rendah (struktural)
+- **Status:** ✅ Diperbaiki (v1.4.1) — ketujuh listener imersif dipindahkan ke dalam `bindEvents()` (diverifikasi: Mode Fokus/Esc/intip toolbar tetap jalan).
 - **Dampak:** listener terpasang pada saat skrip dievaluasi, **sebelum
   `init()`** berjalan (dan sebelum `DOMContentLoaded` bila skrip dieksekusi
   saat `readyState === 'loading'`). Untuk saat ini tidak meledak karena semua
@@ -240,6 +254,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 - **Lokasi:** `js/app.js:1048-1056` (`liveChapterWords`) ← dipanggil
   `updateFocusHud()` (baris 1058) ← `markDirty()` (baris 743-749)
 - **Keparahan:** Rendah (performa)
+- **Status:** ✅ Diperbaiki (v1.4.1) — HUD memakai `RichText.domText()` (walk node teks) — tanpa `DOMParser` per ketikan.
 - **Dampak:** `RichText.getHtml(dom.editor)` = `sanitize(innerHTML)` = parse
   dokumen utuh dari awal. Untuk bab panjang (puluhan ribu kata) ini berjalan
   per penekanan tombol → potensi jeda saat mengetik pada perangkat lambat.
@@ -253,6 +268,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 - **Lokasi:** `js/app.js:368-381` (`updateStats`) — hanya dipanggil dari
   `renderChapters()` dan `saveCurrentChapter()`
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `markDirty()` memanggil `updateStats()`; `chapterWords()` menghitung dari DOM saat `dirty`.
 - **Verifikasi:** probe jsdom — setelah mengetik 6 kata, `#stat-chapter` masih
   `2`; menjadi `6` hanya setelah debounce 1 s.
 - **Saran:** panggil `updateStats()` (ringan: hitung dari DOM editor) dari
@@ -265,6 +281,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 - **Lokasi:** `index.html:20` ↔ `sw.js:12-31` (daftar `ASSETS` hanya berisi
   `icons/icon-192.png` & `icons/icon-512.png`)
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `icons/apple-touch-icon.png` ditambahkan ke `ASSETS`, cache dinaikkan ke `novel-writer-v10`; ada tes konsistensinya.
 - **Dampak:** ikon layar beranda iOS tidak tersedia saat offline pertama kali
   (permintaan jatuh ke stale-while-revalidate dan gagal tanpa cache).
 - **Saran:** tambahkan `'icons/apple-touch-icon.png'` ke `ASSETS` (dan naikkan
@@ -276,6 +293,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `README.md`
 - **Keparahan:** Rendah (dokumentasi)
+- **Status:** ✅ Diperbaiki (v1.4.1) — README disamakan (62 kasus uji) + catatan rilis v1.4.1 ditambahkan.
 - **Temuan:**
   1. “**Test suite** 48 kasus (Node + jsdom) + CI” — sebenarnya **51** kasus
      (bagian “Pengujian” menyebut 51, bagian “Fitur” menyebut 48).
@@ -291,6 +309,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `test/app.test.js:53` (`await wait(1300)` untuk debounce autosave 1000 ms)
 - **Keparahan:** Rendah (CI)
+- **Status:** ✅ Diperbaiki (v1.4.1) — ternyata **bukan** masalah timing: tes aset SW berjalan sebelum tes generator ikon. Ditambahkan hook `before()` yang menghasilkan ikon lebih dulu.
 - **Bukti:** dari ±12 kali menjalankan suite lengkap, **1 kali** menghasilkan
   `50 pass / 1 fail`; 11 kali lainnya `51 pass / 0 fail` (termasuk 3 kali dengan
   beban CPU penuh). Kandidat paling mungkin adalah tes “CRUD proyek/bab +
@@ -305,6 +324,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:1378-1386` (`backupData`) dan `js/app.js:1656` (handler ekspor)
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `backupData()` & handler ekspor mengecek hasil `flushNow()`: berkas tetap dibuat, lalu toast `exportNotSaved` bila gagal.
 - **Dampak:** bila penyimpanan gagal (kuota penuh), `flushNow()` mengembalikan
   `false`, tetapi `backupData()`/`Exporter` tetap jalan memakai cache in-memory.
   Berkas cadangan terlihat “lebih baru” daripada data yang benar-benar tersimpan,
@@ -318,6 +338,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/export.js:188` (`document.body.appendChild(container)`)
 - **Keparahan:** Rendah (UX)
+- **Status:** ✅ Diperbaiki (v1.4.1) — kontainer ekspor kini `position: absolute; left: -10000px;` (tidak lagi berkedip di halaman).
 - **Dampak:** selama `html2pdf` bekerja (bisa beberapa ratus ms pada bab
   panjang), salinan dokumen muncul di dasar halaman dan posisi gulung bisa
   berpindah — layar “berkedip”.
@@ -331,6 +352,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:1388-1424`
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `afterDataReplaced()` menyetel ulang `focusStartWords`, menyegarkan HUD, `updateUndoRestoreButton()` dan `updateRestoreDraftButton()`.
 - **Temuan:**
   1. `focusStartWords` tidak dihitung ulang → penghitung “+N sesi ini” di HUD
      Mode Fokus melenceng setelah restore/undo restore.
@@ -345,6 +367,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 - **Lokasi:** `js/app.js:651-662` (`onTouchDragStart`) dan `711-721` (`cancelTouchDrag`)
 - **Keparahan:** Rendah
+- **Status:** ✅ Diperbaiki (v1.4.1) — `cancelTouchDrag()` dipanggil di awal `onTouchDragStart()` bila drag lama masih aktif.
 - **Dampak:** `onTouchDragStart` menimpa `touchDrag` tanpa memanggil
   `cancelTouchDrag()` lebih dulu → timer long-press lama tidak dibersihkan dan
   elemen lama bisa tertinggal berkelas `dragging`.
@@ -356,6 +379,7 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 ### BUG-20 — Kode mati & kebersihan (tanpa dampak fungsional)
 
 - **Keparahan:** Kosmetik
+- **Status:** ✅ Diperbaiki (v1.4.1) — `Icons.eye`/`Icons.alert`, `TextUtil.render`, 5 kunci i18n tak terpakai dibuang; parameter `showToast` dihapus; `catch {}`; dua pernyataan dipisah; `#empty-state` diberi atribut `hidden`.
 - **Temuan:**
   - `js/icons.js`: `Icons.eye` dan `Icons.alert` tidak dipakai di mana pun
     (tidak di HTML, tidak di JS).
@@ -401,19 +425,23 @@ tulisan / jebakan fokus** (BUG-03, BUG-05).
 
 ```bash
 npm install
-npm run icons
-npm test          # 51 kasus — catat bila ada flake (BUG-15)
-npx eslint js sw  # BUG-01 (no-undef) & BUG-07 (no-dupe-keys) akan muncul
+npm test          # 62 kasus (51 lama + 11 regresi)
+npx eslint js sw tools   # bersih (kecuali peringatan lintas-berkas)
 ```
 
-Perbaikan yang disarankan untuk diuji ulang (regresi):
+Regresi yang ditambahkan untuk mengunci perbaikan:
 
-| Bug | Tes baru yang disarankan |
+| Bug | Tes |
 |---|---|
-| BUG-01 | Mode Baca + `Alt+ArrowRight` → bab aktif berubah |
-| BUG-02 | ganti bahasa saat modal terbuka → `activeElement` tetap di dalam modal |
-| BUG-03 | `Tab` tanpa blok tersentuh → `defaultPrevented === false` |
-| BUG-04 | hapus proyek aktif (2 proyek) → `activeProjectId === settings.lastProject` |
-| BUG-05 | bab aktif dihapus tab lain → ketikan dipertahankan atau pengguna diperingatkan |
-| BUG-06 | judul kosong → toast/muncul pesan, modal tetap terbuka |
-| BUG-09 | `sanitize('<p>a</p>\n\n<p>b</p>')` → tanpa `class="gap"` |
+| BUG-01 | `BUG-01: Alt+Panah di Mode Baca benar-benar memindah bab` |
+| BUG-02 | `BUG-02: ganti bahasa tidak mencuri fokus dari modal Pengaturan` |
+| BUG-03 | `BUG-03: Tab hanya dicegat bila indent bekerja (kursor tidak terjebak)` |
+| BUG-04 | `BUG-04: hapus proyek aktif -> UI & penunjuk tersimpan sinkron` |
+| BUG-05 | `BUG-05: bab aktif dihapus tab lain -> draf disimpan & bisa dipulihkan` |
+| BUG-06 | `BUG-06: judul kosong -> pesan + aria-invalid (bukan diam saja)` |
+| BUG-09 | `BUG-09: spasi/baris baru antar tag blok BUKAN jeda palsu` |
+| BUG-11 | `BUG-11: RichText.domText menghitung kata tanpa parse ulang dokumen` |
+| BUG-12 | `BUG-12: statistik kata mengikuti ketikan (tanpa menunggu auto-save)` |
+| BUG-13 | `BUG-13: Service Worker mem-precache seluruh ikon yang dipakai HTML` |
+| BUG-15 | hook `before()` di `test/consistency.test.js` menghasilkan ikon lebih dulu |
+| BUG-16 | `BUG-16: cadangkan saat penyimpanan gagal -> berkas tetap dibuat + peringatan` |

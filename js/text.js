@@ -39,13 +39,6 @@ const TextUtil = {
     });
   },
 
-  /** Ganti seluruh isi container dengan paragraf dari teks. */
-  render(text, container) {
-    if (!container) return;
-    container.textContent = '';
-    this.appendParagraphs(text, container);
-  },
-
   /**
    * Jumlah kata: token yang mengandung huruf/angka.
    * Tanda baca yang berdiri sendiri (mis. "—") tidak dihitung.

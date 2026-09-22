@@ -288,3 +288,29 @@ test('Exporter.buildDocxChildren: run berformat (bold/italics) dari isi html', (
   const quote = kids.find((p) => p.indent && p.indent.left > 0 && (p.children || []).some((r) => r.text === 'Kutip.'));
   assert.ok(quote, 'kutipan menjorok masuk');
 });
+
+test('BUG-09: spasi/baris baru antar tag blok BUKAN jeda palsu', () => {
+  // newline pada hasil tempel Word/Google Docs dulu jadi class="gap"
+  assert.equal(RichText.sanitize('<p>a</p>\n\n<p>b</p>'), '<p>a</p><p>b</p>');
+  assert.equal(RichText.sanitize('<p>a</p>\n<p>b</p>'), '<p>a</p><p>b</p>');
+  assert.equal(RichText.sanitize('<p>a</p>\n \n<p>b</p>'), '<p>a</p><p>b</p>');
+  assert.equal(RichText.sanitize('  \n <p>a</p>'), '<p>a</p>', 'spasi awal tidak jadi jeda');
+  assert.equal(RichText.sanitize('<h2>Judul</h2>\n\n<p>isi</p>'), '<h2>Judul</h2><p>isi</p>');
+  // spasi di dalam satu blok tetap dipertahankan
+  assert.equal(RichText.sanitize('<p>a <strong>b</strong> c</p>'), '<p>a <strong>b</strong> c</p>');
+  // jeda yang sesungguhnya (paragraf kosong / class eksplisit) tetap hidup
+  assert.equal(RichText.sanitize('<p>a</p><p><br></p><p>b</p>'), '<p>a</p><p class="gap">b</p>');
+  assert.equal(RichText.sanitize('<p>a</p>\n\n<p class="gap">b</p>'), '<p>a</p><p class="gap">b</p>');
+});
+
+test('BUG-11: RichText.domText menghitung kata tanpa parse ulang dokumen', () => {
+  const el = sandbox.document.createElement('div');
+  el.innerHTML = '<p>Halo <strong>dunia</strong>.</p><p>Kedua</p>';
+  assert.equal(RichText.domText(el), 'Halo  dunia . Kedua ');
+  assert.equal(TextUtil.countWords(RichText.domText(el)), 3); // Halo + dunia + Kedua
+  // nbsp (indent pengguna) tidak dihitung sebagai kata
+  const ind = sandbox.document.createElement('p');
+  ind.textContent = '\u00a0\u00a0Halo';
+  assert.equal(TextUtil.countWords(RichText.domText(ind)), 1);
+  assert.equal(RichText.domText(null), '');
+});
