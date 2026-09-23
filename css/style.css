@@ -384,6 +384,39 @@ html, body {
   color: var(--text);
 }
 
+/* ---- ILUSTRASI (figure) — ilustrasi tokoh/karakter di dalam naskah ---- */
+.prose figure {
+  margin: 1.7em auto;
+  text-align: center;
+  text-indent: 0;
+  break-inside: avoid;
+}
+.prose figure img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--bg-input);
+  -webkit-user-drag: none;
+}
+.prose figure.fig-s img { width: 46%; }
+.prose figure.fig-m img { width: 72%; }
+.prose figure.fig-l img { width: 100%; }
+.prose figure figcaption {
+  margin-top: 0.6em;
+  font-size: 0.76em;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-indent: 0;
+  color: var(--text-dim);
+}
+/* gambar tidak disunting: satu Backspace menghapus seluruh ilustrasi */
+.prose figure img[contenteditable="false"] { cursor: default; }
+.prose figure img:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ---- EMPTY STATE ---- */
 #empty-state {
   flex: 1;
@@ -509,6 +542,62 @@ body.modal-open { overflow: hidden; }
 }
 
 .modal-actions { display: flex; justify-content: flex-start; gap: 10px; margin-top: 6px; }
+
+/* ---- MODAL ILUSTRASI ---- */
+.form-hint {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.modal input[type="file"] {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.modal input[type="file"]::-webkit-file-upload-button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  padding: 4px 10px;
+  margin-right: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.img-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.img-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 190px;
+  border-radius: 2px;
+}
+.img-meta {
+  margin-top: -6px;
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.radio-row { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary:disabled:hover { background: var(--accent); }
 
 /* ---- EKSPOR ---- */
 .export-scope { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }

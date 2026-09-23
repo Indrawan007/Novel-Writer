@@ -4,7 +4,7 @@ import path from 'node:path';
 import { JSDOM } from 'jsdom';
 
 export const ROOT = path.resolve(import.meta.dirname, '..');
-export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/richtext.js', 'js/export.js', 'js/app.js'];
+export const SCRIPTS = ['js/i18n.js', 'js/storage.js', 'js/icons.js', 'js/text.js', 'js/image.js', 'js/richtext.js', 'js/export.js', 'js/app.js'];
 
 /**
  * Muat aplikasi nyata (index.html + semua skrip) ke jsdom.
@@ -24,7 +24,7 @@ export async function createApp({ seed = null } = {}) {
   const bundle = SCRIPTS
     .map((f) => `/* == ${f} == */\n` + fs.readFileSync(path.join(ROOT, f), 'utf8'))
     .join('\n;\n')
-    + '\n;window.NW = { Storage, TextUtil, RichText, Exporter, I18N, Icons, t, applyLanguage };';
+    + '\n;window.NW = { Storage, TextUtil, RichText, Exporter, ImageUtil, I18N, Icons, t, applyLanguage };';
   w.eval(bundle);
 
   if (w.document.readyState === 'loading') {
@@ -101,10 +101,10 @@ export async function loadLogic() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
 
-  for (const f of ['js/storage.js', 'js/text.js', 'js/richtext.js', 'js/export.js']) {
+  for (const f of ['js/storage.js', 'js/text.js', 'js/image.js', 'js/richtext.js', 'js/export.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), sandbox, { filename: f });
   }
-  const refs = vm.runInContext('({ Storage, TextUtil, RichText, Exporter })', sandbox);
+  const refs = vm.runInContext('({ Storage, TextUtil, RichText, Exporter, ImageUtil })', sandbox);
   return { ...refs, sandbox };
 }
 

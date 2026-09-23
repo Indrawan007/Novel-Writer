@@ -160,6 +160,9 @@
           <button type="button" class="fmt-btn" id="btn-scene" data-fmt="scene" data-i18n-title="fmtScene" data-i18n-aria="fmtScene" title="Jeda adegan" aria-label="Jeda adegan">
             <span class="icon" data-icon="scene" aria-hidden="true"></span>
           </button>
+          <button type="button" class="fmt-btn" id="btn-image" data-fmt="image" data-i18n-title="fmtImage" data-i18n-aria="fmtImage" title="Sisipkan ilustrasi" aria-label="Sisipkan ilustrasi">
+            <span class="icon" data-icon="image" aria-hidden="true"></span>
+          </button>
         </div>
         <div id="editor" class="prose" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" data-empty="true"></div>
         <!-- Tampilan Mode Baca: bab dirender sebagai halaman buku (js/richtext.js) -->
@@ -256,6 +259,38 @@
           </button>
         </div>
       </div>
+
+      <!-- Insert Illustration (gambar ilustrasi tokoh/karakter) -->
+    <div id="modal-image" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-image-title" hidden>
+      <h2 id="modal-image-title" data-i18n="insertImage">Sisipkan Ilustrasi</h2>
+      <div class="form-group">
+        <label for="inp-img-file" data-i18n="imageFile">Berkas gambar</label>
+        <input type="file" id="inp-img-file" accept="image/png,image/jpeg,image/webp,image/gif">
+        <p class="form-hint" data-i18n="imageHint">PNG, JPEG, WebP, atau GIF. Gambar diperkecil &amp; dikompres otomatis agar hemat penyimpanan browser, lalu tersimpan di dalam bab ini.</p>
+      </div>
+      <div class="img-preview" id="img-preview" hidden>
+        <img id="img-preview-el" alt="">
+      </div>
+      <p class="img-meta" id="img-meta" hidden></p>
+      <div class="form-group">
+        <label for="inp-img-caption" data-i18n="imageCaption">Nama tokoh / keterangan</label>
+        <input type="text" id="inp-img-caption" maxlength="160">
+      </div>
+      <div class="form-group">
+        <label data-i18n="imageSize">Ukuran ilustrasi</label>
+        <div class="radio-row">
+          <label class="check-label"><input type="radio" name="img-size" value="s"> <span data-i18n="imageSizeSmall">Kecil</span></label>
+          <label class="check-label"><input type="radio" name="img-size" value="m" checked> <span data-i18n="imageSizeMedium">Sedang</span></label>
+          <label class="check-label"><input type="radio" name="img-size" value="l"> <span data-i18n="imageSizeFull">Penuh</span></label>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" data-close data-i18n="cancel">Batal</button>
+        <button class="btn-primary" id="btn-insert-image" data-i18n="insert" disabled>
+          Sisipkan
+        </button>
+      </div>
+    </div>
 
       <!-- Export -->
     <div id="modal-export" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-export-title" hidden>
@@ -437,6 +472,7 @@
     <script src="js/storage.js"></script>
     <script src="js/icons.js"></script>
     <script src="js/text.js"></script>
+    <script src="js/image.js"></script>
     <script src="js/richtext.js"></script>
     <script src="js/export.js"></script>
     <script src="js/app.js"></script>

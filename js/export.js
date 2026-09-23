@@ -167,6 +167,15 @@ const Exporter = {
       .nw-pdf blockquote { margin: 0.6em 2em; text-indent: 0; }
       .nw-pdf strong { font-weight: bold; }
       .nw-pdf em { font-style: italic; }
+      .nw-pdf figure { margin: 1.4em auto; text-align: center; page-break-inside: avoid; }
+      .nw-pdf figure img { display: block; margin: 0 auto; max-width: 100%; }
+      .nw-pdf figure.fig-s img { width: 46%; }
+      .nw-pdf figure.fig-m img { width: 72%; }
+      .nw-pdf figure.fig-l img { width: 100%; }
+      .nw-pdf figure figcaption {
+        margin-top: 0.5em; font-size: 9.5pt; font-style: italic;
+        color: #555; text-align: center; text-indent: 0;
+      }
       .nw-pdf-cover { text-align: center; font-family: sans-serif; }
       .nw-pdf-cover h1 { font-size: 24pt; margin-bottom: 6px; }
       .nw-pdf-cover p { color: #666; font-size: 11pt; margin-bottom: 40px; text-indent: 0; text-align: center; }
@@ -260,7 +269,31 @@ const Exporter = {
           bold: r.bold ? true : undefined,
           italics: r.italic ? true : undefined
         }));
-        if (b.tag === 'h2') {
+        if (b.tag === 'figure') {
+          // Ilustrasi: gambar disematkan (bila pustaka mendukung ImageRun),
+          // lalu keterangannya jadi baris miring rata tengah.
+          const shot = (typeof ImageUtil !== 'undefined')
+            ? ImageUtil.docxImage(b.src, b.width, b.height, 500, 680) : null;
+          if (shot && typeof lib.ImageRun === 'function') {
+            children.push(new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 240, after: 120 },
+              children: [new lib.ImageRun({
+                data: shot.data,
+                type: shot.type,
+                transformation: { width: shot.width, height: shot.height }
+              })]
+            }));
+          }
+          const cap = String(b.caption || b.alt || '').trim();
+          if (cap) {
+            children.push(new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 0, after: 240 },
+              children: [run(cap, { italics: true, size: 20, color: '666666' })]
+            }));
+          }
+        } else if (b.tag === 'h2') {
           children.push(new Paragraph({
             heading: HeadingLevel.HEADING_2,
             spacing: { before: 360, after: 180 },

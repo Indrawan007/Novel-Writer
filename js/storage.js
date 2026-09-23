@@ -122,6 +122,19 @@ const Storage = {
     return this.save(this._read());
   },
 
+  /**
+   * Perkiraan ukuran data tersimpan (karakter JSON, ≈ byte).
+   * Dipakai untuk peringatan dini sebelum kuota benar-benar penuh —
+   * terutama setelah menyisipkan ilustrasi (gambar ikut tersimpan di sini).
+   */
+  approxBytes() {
+    try {
+      const raw = localStorage.getItem(DB_KEY);
+      if (raw != null) return raw.length;   // jalan pintas tanpa serialize ulang
+      return JSON.stringify(this._read()).length;
+    } catch { return 0; }
+  },
+
   uid() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID();

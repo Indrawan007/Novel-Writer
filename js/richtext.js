@@ -5,10 +5,14 @@
 
    Model dokumen (kanonik, disimpan di ch.content dengan format 'html'):
      Blok   : <p> | <p class="gap"> | <p class="scene"> | <h2> | <blockquote>
+              | <figure class="fig-s|fig-m|fig-l">   (ilustrasi tokoh/karakter)
      Inline : <strong> | <em>
    Semua masukan (ketikan browser, tempel, backup lama) DIPAKSA melewati
    model ini: sanitasi allowlist membuang tag/atribut lain — termasuk
    script, style, dan penangan acara. Tidak ada innerHTML ke DOM hidup.
+   Ilustrasi hanya boleh berisi <img> dengan src yang lolos allowlist
+   ImageUtil.safeSrc (data URL gambar / http(s)); src lain -> gambar dibuang
+   dan teks keterangannya diselamatkan menjadi paragraf.
 
    Konten lama (teks polos, format 'text' / tanpa format) tetap didukung:
    satu baris = satu paragraf, baris kosong = jeda (lihat js/text.js).
@@ -24,14 +28,17 @@ const RichText = {
     figcaption: 'p', caption: 'p', address: 'p', form: 'p'
   },
   INLINE_MAP: { strong: 'strong', b: 'strong', em: 'em', i: 'em' },
+  /* 'img' sengaja TIDAK ada di sini: gambar kini didukung sebagai blok
+     <figure> (ilustrasi) — tetapi tetap dibuang bila src-nya tidak aman. */
   DROP_WITH_CONTENT: new Set([
     'script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template',
-    'noscript', 'canvas', 'video', 'audio', 'img', 'input', 'select',
+    'noscript', 'canvas', 'video', 'audio', 'input', 'select',
     'textarea', 'button', 'link', 'meta', 'title', 'head', 'source', 'track',
     'map', 'area', 'base', 'col', 'colgroup', 'param', 'dialog'
   ]),
   BLOCKISH: 'p,h1,h2,h3,h4,h5,h6,blockquote,div,li,pre,dt,dd,section,article,header,footer,main',
   SCENE_TEXT: '* * *',
+  /* Ukuran ilustrasi: s = kecil, m = sedang, l = penuh */
 
   /* ============================================
      PARSER — html mentah -> daftar blok kanonik
@@ -110,6 +117,48 @@ const RichText = {
         }
         if (this.DROP_WITH_CONTENT.has(tag)) continue;
 
+        /* ---- Ilustrasi: <figure> (atau <img> lepas) jadi blok gambar ---- */
+        if (tag === 'figure' || tag === 'img') {
+          const host = tag === 'figure' ? child : null;
+          const imgEl = tag === 'img' ? child
+            : (child.querySelector ? child.querySelector('img') : null);
+          const capEl = host && host.querySelector ? host.querySelector('figcaption') : null;
+          const get = (el, name) => (el && el.getAttribute) ? el.getAttribute(name) : null;
+          const src = this.safeImgSrc(get(imgEl, 'src'));
+          const alt = this._plainText(get(imgEl, 'alt'));
+          const caption = this._plainText(capEl ? capEl.textContent : '');
+          const text = caption || alt;
+
+          endBlock();
+          if (!src) {
+            // src tidak aman/hilang -> gambar dibuang, TEKSNYA diselamatkan
+            // (keterangan/alt jadi paragraf, supaya tulisan tidak lenyap)
+            if (text) { startBlock('p', true); pushText(text, false, false); endBlock(); }
+            continue;
+          }
+          startBlock('figure', true);
+          cur.src = src;
+          cur.alt = alt || caption;
+          cur.caption = caption;
+          cur.width = this._dim(get(imgEl, 'width'));
+          cur.height = this._dim(get(imgEl, 'height'));
+          cur.size = this._figSize(host ? host.getAttribute('class') : '');
+          endBlock();
+          // Sisa isi <figure> (mis. paragraf hasil Enter di dalam keterangan)
+          // TIDAK dibuang — ia jadi blok teks tersendiri setelah ilustrasi.
+          if (host) {
+            for (const kid of [...host.childNodes]) {
+              if (kid.nodeType === 3) { pushText(kid.nodeValue, false, false); continue; }
+              if (kid.nodeType !== 1) continue;
+              const ktag = String(kid.tagName || '').toLowerCase();
+              if (ktag === 'img' || ktag === 'figcaption') continue;
+              visit(kid, false, false);
+            }
+            endBlock();
+          }
+          continue;
+        }
+
         const asBlock = this.BLOCK_MAP[tag];
         if (asBlock) {
           endBlock();
@@ -142,6 +191,16 @@ const RichText = {
 
   /** Rapikan satu blok: satukan run, rapikan spasi tepi, deteksi kosong. */
   _finalizeBlock(b) {
+    // Ilustrasi: tidak punya run teks; hidup-matinya ditentukan src-nya.
+    if (b.tag === 'figure') {
+      b.runs = [];
+      b.gap = false;
+      b.scene = false;
+      b.size = this._figSize('fig-' + (b.size || 'm'));
+      b.caption = this._plainText(b.caption);
+      b.alt = this._plainText(b.alt);
+      return b.src ? b : null;
+    }
     if (b.scene && !b.runs.some(r => r.text.trim() !== '')) {
       b.runs = [{ text: this.SCENE_TEXT, bold: false, italic: false }];
     }
@@ -178,6 +237,44 @@ const RichText = {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   },
 
+  /** Escapes untuk konteks ATRIBUT (termasuk tanda kutip). */
+  escAttr(s) {
+    return this.esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  },
+
+  /* ============================================
+     ILUSTRASI (figure) — pembantu
+     ============================================ */
+
+  /** src gambar yang aman disimpan; selain itu '' (lihat ImageUtil.safeSrc). */
+  safeImgSrc(src) {
+    if (typeof ImageUtil !== 'undefined' && ImageUtil.safeSrc) return ImageUtil.safeSrc(src);
+    // Tanpa ImageUtil (seharusnya tidak pernah): jangan pernah simpan src mentah.
+    return /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(String(src || ''))
+      ? String(src) : '';
+  },
+
+  /** Teks keterangan/alt: baris & spasi dirapikan, panjang dibatasi. */
+  _plainText(s, max) {
+    const t = String(s == null ? '' : s)
+      .replace(/[\r\n\t\f]+/g, ' ')
+      .replace(/ {2,}/g, ' ')
+      .trim();
+    return t.slice(0, max || 300);
+  },
+
+  /** Atribut lebar/tinggi gambar: angka wajar, atau 0 bila tidak ada. */
+  _dim(v) {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) && n > 0 ? Math.min(8000, n) : 0;
+  },
+
+  /** Kelas figure -> ukuran ('s'|'m'|'l'), default 'm'. */
+  _figSize(cls) {
+    const m = /(?:^|\s)fig-([sml])(?:\s|$)/.exec(String(cls || ''));
+    return m ? m[1] : 'm';
+  },
+
   _runHtml(r) {
     if (!r.text) return '';
     let s = this.esc(r.text);
@@ -189,10 +286,20 @@ const RichText = {
   /** Daftar blok -> HTML kanonik (bentuk tunggal yang disimpan). */
   serialize(blok) {
     return (blok || []).map(b => {
+      if (b.tag === 'figure') return this._figureHtml(b);
       const attrs = b.scene ? ' class="scene"' : (b.gap ? ' class="gap"' : '');
       const inner = (b.runs || []).map(r => this._runHtml(r)).join('');
       return '<' + b.tag + attrs + '>' + inner + '</' + b.tag + '>';
     }).join('');
+  },
+
+  /** HTML kanonik sebuah blok ilustrasi. */
+  _figureHtml(b) {
+    const dims = (b.width > 0 ? ' width="' + b.width + '"' : '') +
+                 (b.height > 0 ? ' height="' + b.height + '"' : '');
+    const img = '<img src="' + this.escAttr(b.src) + '" alt="' + this.escAttr(b.alt || '') + '"' + dims + '>';
+    const cap = b.caption ? '<figcaption>' + this.esc(b.caption) + '</figcaption>' : '';
+    return '<figure class="fig-' + this._figSize('fig-' + (b.size || 'm')) + '">' + img + cap + '</figure>';
   },
 
   /** Sanitasi: html apa pun -> HTML kanonik aman (allowlist ketat). */
@@ -220,14 +327,21 @@ const RichText = {
     const out = [];
     let prev = null;
     for (const b of this.blocks(html)) {
-      const text = (b.runs || []).map(r => r.text).join('').replace(/\u00a0/g, ' ');
+      // Ilustrasi tak bisa digambar di berkas .txt: keterangannya (nama tokoh)
+      // yang ditinggalkan, dipisah baris kosong seperti judul/kutipan.
+      const text = b.tag === 'figure'
+        ? String(b.caption || b.alt || '').replace(/\u00a0/g, ' ')
+        : (b.runs || []).map(r => r.text).join('').replace(/\u00a0/g, ' ');
       const needSpace = !!(
         b.gap || b.scene || b.tag !== 'p' ||
         (prev && (prev.tag !== 'p' || prev.scene))
       );
-      if (needSpace && out.length) out.push('');
-      out.push(text);
-      prev = b;
+      if (text) {
+        if (needSpace && out.length) out.push('');
+        out.push(text);
+      }
+      // ilustrasi tanpa keterangan tidak meninggalkan baris kosong sisa
+      prev = (b.tag === 'figure' && !text) ? null : b;
     }
     return out.join('\n');
   },
@@ -248,6 +362,7 @@ const RichText = {
     const doc = container.ownerDocument || document;
     const frag = doc.createDocumentFragment();
     (blok || []).forEach(b => {
+      if (b.tag === 'figure') { frag.appendChild(this._figureNode(doc, b)); return; }
       const el = doc.createElement(b.tag);
       if (b.scene) el.className = 'scene';
       else if (b.gap) el.className = 'gap';
@@ -260,6 +375,32 @@ const RichText = {
       frag.appendChild(el);
     });
     return frag;
+  },
+
+  /**
+   * Bangun <figure> dari blok ilustrasi.
+   * Atribut di-set lewat setAttribute (bukan innerHTML) — src sudah lolos
+   * allowlist, jadi tidak ada celah injeksi. Gambar ditandai tidak bisa
+   * disunting (contenteditable=false) supaya satu tombol Backspace
+   * menghapus seluruh ilustrasi, bukan menyisipkan teks ke dalamnya.
+   */
+  _figureNode(doc, b) {
+    const fig = doc.createElement('figure');
+    fig.className = 'fig-' + this._figSize('fig-' + (b.size || 'm'));
+    const img = doc.createElement('img');
+    img.setAttribute('src', b.src);
+    img.setAttribute('alt', b.alt || '');
+    if (b.width > 0) img.setAttribute('width', String(b.width));
+    if (b.height > 0) img.setAttribute('height', String(b.height));
+    img.setAttribute('contenteditable', 'false');
+    img.setAttribute('draggable', 'false');
+    fig.appendChild(img);
+    if (b.caption) {
+      const cap = doc.createElement('figcaption');
+      cap.textContent = b.caption;
+      fig.appendChild(cap);
+    }
+    return fig;
   },
 
   /** Ganti isi container dengan paragraf berformat hasil sanitasi. */
@@ -302,10 +443,11 @@ const RichText = {
     return out.replace(/\u00a0/g, ' ');
   },
 
-  /** Penanda kosong untuk placeholder CSS. */
+  /** Penanda kosong untuk placeholder CSS (ilustrasi tanpa teks pun berisi). */
   syncEmpty(el) {
     if (!el) return;
-    const empty = !(el.textContent || '').replace(/[\s\u00a0]/g, '');
+    const empty = !(el.textContent || '').replace(/[\s\u00a0]/g, '') &&
+      !(el.querySelector && el.querySelector('img'));
     el.setAttribute('data-empty', empty ? 'true' : 'false');
   },
 
@@ -354,11 +496,16 @@ const RichText = {
     return root;
   },
 
-  /** Blok terdalam (tanpa blok lain di dalamnya) yang tersentuh seleksi. */
+  /**
+   * Blok terdalam (tanpa blok lain di dalamnya) yang tersentuh seleksi.
+   * Editor yang berisi sesuatu tetapi tak punya blok teks (mis. hanya
+   * ilustrasi) menghasilkan daftar kosong — BUKAN editor itu sendiri,
+   * supaya operasi format tidak pernah mengganti wadah editor.
+   */
   _blocksIn(el, range) {
     const list = [...el.querySelectorAll(this.BLOCKISH)]
       .filter(b => !b.querySelector || !b.querySelector(this.BLOCKISH));
-    const blocks = list.length ? list : [el];
+    const blocks = list.length ? list : (el.childElementCount ? [] : [el]);
     return blocks.filter(b => this._intersects(range, b));
   },
 
@@ -607,7 +754,8 @@ const RichText = {
   toggleBlock(el, tag) {
     const range = this._range(el);
     if (!range) return false;
-    const blocks = this._blocksIn(el, range);
+    const blocks = this._blocksIn(el, range)
+      .filter(b => b !== el && b.tagName && String(b.tagName).toLowerCase() !== 'figure');
     if (!blocks.length) return false;
     const saved = this._saveSel(el, range, blocks);
     const made = [];
@@ -661,6 +809,60 @@ const RichText = {
         sel.addRange(r);
       }
     } catch {}
+    return true;
+  },
+
+  /**
+   * Sisipkan ilustrasi (<figure>) di posisi kursor, lalu sediakan paragraf
+   * lanjutan kosong supaya penulis bisa langsung mengetik lagi.
+   * data: { src, alt, caption, width, height, size }
+   * Mengembalikan false bila src tidak aman (gambar tidak pernah disimpan).
+   */
+  insertFigure(el, data) {
+    if (!el || !data) return false;
+    const src = this.safeImgSrc(data.src);
+    if (!src) return false;
+    const doc = el.ownerDocument;
+    const fig = this._figureNode(doc, {
+      tag: 'figure', src,
+      alt: this._plainText(data.alt),
+      caption: this._plainText(data.caption),
+      width: this._dim(data.width),
+      height: this._dim(data.height),
+      size: this._figSize('fig-' + (data.size || 'm'))
+    });
+    const cont = doc.createElement('p');
+    cont.appendChild(doc.createElement('br'));
+
+    const range = this._range(el);
+    const block = range ? this._nearestBlock(range.startContainer, el) : null;
+    if (block && block !== el && el.contains(block)) {
+      const empty = !(block.textContent || '').replace(/[\s\u00a0]/g, '');
+      if (empty) {
+        // paragraf kosong tempat kursor berada: ganti (jangan sisakan baris hantu)
+        block.parentNode.replaceChild(fig, block);
+        fig.parentNode.insertBefore(cont, fig.nextSibling);
+      } else {
+        block.parentNode.insertBefore(fig, block.nextSibling);
+        fig.parentNode.insertBefore(cont, fig.nextSibling);
+      }
+    } else {
+      el.appendChild(fig);
+      el.appendChild(cont);
+    }
+
+    // Kursor berdiri di paragraf lanjutan — lanjut menulis tanpa menyentuh mouse
+    try {
+      const sel = this._sel(el);
+      const r = doc.createRange();
+      r.selectNodeContents(cont);
+      r.collapse(true);
+      if (sel) {
+        if (sel.removeAllRanges) sel.removeAllRanges();
+        sel.addRange(r);
+      }
+    } catch {}
+    this.syncEmpty(el);
     return true;
   },
 
