@@ -74,6 +74,15 @@ test('manifest tidak lagi memakai ikon data: URL (tak didukung untuk instalasi)'
   assert.ok(manifest.icons.some(i => i.src.endsWith('.png') && i.purpose === 'maskable'));
 });
 
+test('mode baca: scrollport di #reader-view, jeda adegan tidak kalah dari justify', () => {
+  const css = read('css/style.css');
+  assert.match(css, /html\.reader-mode #reader-view\s*\{[^}]*overflow-y:\s*auto/);
+  assert.match(css, /html\.reader-mode #editor-wrap\s*\{[^}]*overflow:\s*hidden/);
+  assert.match(css, /html\.reader-mode #reader-view\.prose p\.scene\s*\{[^}]*text-align:\s*center/);
+  assert.match(css, /p\.reader-open::first-letter/);
+  assert.doesNotMatch(css, /p:first-of-type::first-letter/);
+});
+
 test('cache Service Worker dinaikkan versinya saat strategi berubah', () => {
   assert.match(swJs, /novel-writer-v\d+/);
   assert.match(swJs, /request\.mode === 'navigate'/, 'navigasi harus network-first');

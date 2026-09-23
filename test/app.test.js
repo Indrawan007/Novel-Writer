@@ -487,6 +487,86 @@ const seedTwoProjects = () => ({
   settings: { theme: 'light', fontSize: 18, lineHeight: 1.8, autoSaveDelay: 1000, lang: 'id', lastProject: 'p1', lastChapter: 'c1' }
 });
 
+test('mode baca: fokus lepas dari toolbar, Spasi menggulir, jeda adegan bukan drop-cap', async () => {
+  const { w, $, S } = await createApp({ seed: seedProject() });
+  const proj = S.getProject('p1');
+  proj.chapters[0].content = '<p class="scene">* * *</p><p>“Bukan pembuka.”</p><p>Pembuka bab yang sungguh.</p>';
+  proj.chapters[0].format = 'html';
+  proj.chapters[1].content = '<p>Bab dua dimulai di sini.</p>';
+  proj.chapters[1].format = 'html';
+  S.saveProject(proj);
+  w.NovelWriter.renderAll();
+
+  $('#btn-reader').focus();
+  click(w, $('#btn-reader'));
+  const root = w.document.documentElement;
+  const rv = $('#reader-view');
+  assert.equal(root.classList.contains('reader-mode'), true);
+  assert.equal(w.document.activeElement, rv, 'fokus pindah ke halaman baca (toolbar tidak nyangkut)');
+  assert.equal(rv.getAttribute('tabindex'), '-1');
+
+  const scene = rv.querySelector('p.scene');
+  assert.ok(scene, 'jeda adegan tetap ada');
+  assert.equal(scene.classList.contains('reader-open'), false, 'jeda adegan tidak kena drop-cap');
+  assert.equal(rv.querySelector('p.reader-open'), null, 'paragraf tanda kutip juga tidak jadi drop-cap');
+
+  // Tata letak jsdom kosong — pasang ukuran gulung supaya Spasi benar-benar menggulir.
+  let top = 0;
+  Object.defineProperty(rv, 'clientHeight', { configurable: true, get: () => 400 });
+  Object.defineProperty(rv, 'scrollHeight', { configurable: true, get: () => 2000 });
+  Object.defineProperty(rv, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (v) => { top = Number(v) || 0; }
+  });
+  const space = new w.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  w.document.dispatchEvent(space);
+  assert.equal(space.defaultPrevented, true, 'Spasi ditangani halaman baca');
+  assert.ok(top > 0, 'Spasi menggulir ke bawah');
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c1', 'Spasi di tengah bab tidak loncat bab');
+  assert.equal(root.classList.contains('reader-mode'), true, 'Spasi tidak keluar dari Mode Baca');
+
+  // Di dasar bab (scrollTop == max), Spasi lanjut ke bab berikutnya.
+  top = 1600;
+  key(w, w.document, { key: ' ' });
+  assert.equal(w.NovelWriter.state.activeChapterId, 'c2', 'Spasi di dasar bab = bab berikutnya');
+  assert.equal(rv.querySelector('h1').textContent, 'Bab 2');
+  assert.ok(rv.querySelector('p.reader-open'), 'pembuka berhuruf mendapat drop-cap');
+  assert.equal(root.classList.contains('reader-mode'), true);
+
+  key(w, w.document, { key: 'r', ctrlKey: true, altKey: true });
+  assert.equal(root.classList.contains('reader-mode'), false, 'Ctrl+Alt+R keluar dari Mode Baca');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('mode baca: tombol layar penuh tidak menutup Mode Baca; Esc browser tetap menutup', async () => {
+  const { w, $ } = await createApp({ seed: seedProject() });
+  click(w, $('#btn-reader'));
+  const root = w.document.documentElement;
+  assert.equal(root.classList.contains('reader-mode'), true);
+
+  let fs = w.document.documentElement;
+  Object.defineProperty(w.document, 'fullscreenElement', { configurable: true, get: () => fs });
+  w.document.exitFullscreen = () => {
+    fs = null;
+    w.document.dispatchEvent(new w.Event('fullscreenchange'));
+    return Promise.resolve();
+  };
+
+  click(w, $('#btn-reader-fullscreen'));
+  assert.equal(root.classList.contains('reader-mode'), true,
+    'keluar fullscreen lewat HUD tidak menutup Mode Baca');
+  assert.equal(fs, null, 'fullscreen benar-benar dilepas');
+
+  // Keluar fullscreen yang tidak diminta (Esc ditelan browser) tetap menutup mode.
+  fs = w.document.documentElement;
+  fs = null;
+  w.document.dispatchEvent(new w.Event('fullscreenchange'));
+  assert.equal(root.classList.contains('reader-mode'), false,
+    'fullscreenchange tanpa permintaan HUD menutup Mode Baca');
+  assert.deepEqual(w.__errors, []);
+});
+
 test('BUG-01: Alt+Panah di Mode Baca benar-benar memindah bab', async () => {
   const { w, $ } = await createApp({ seed: seedProject() });
   click(w, $('#btn-reader'));

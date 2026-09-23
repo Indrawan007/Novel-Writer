@@ -24,12 +24,16 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   juga didukung. **Ilustrasi bisa diganti & dihapus**: klik ilustrasinya di
   editor, lalu pakai bilah aksi di atasnya — **Ganti** (pilih berkas baru,
   ditukar di tempat tanpa mengubah posisi/keterangan/ukuran) atau **Hapus**
-- **Mode Fokus** (`Ctrl+Shift+F` / `F9`) & **Mode Baca** (`Ctrl+Shift+R` / `F10`) —
+- **Mode Fokus** (`Ctrl+Shift+F` / `F9`) & **Mode Baca** (`Ctrl+Alt+R` / `F10`) —
   imersif penuh: fullscreen otomatis, semua chrome (sidebar, toolbar, panel
   format, HUD) lenyap total dan hanya muncul saat ada aktivitas; kursor pun
   disembunyikan saat idle. Fokus: mesin ketik (kursor di tengah), fokus
-  paragraf (sekitar redup), penghitung kata sesi. Baca: halaman buku dengan
-  judul bab, bilah progres, navigasi bab, estimasi sisa baca
+  paragraf (sekitar redup), penghitung kata sesi. Baca: halaman buku yang
+  bisa digulung (judul, jeda adegan tetap di tengah, ilustrasi tidak memotong
+  kolom), bilah progres, navigasi bab, `Spasi`/`PgUp`–`PgDn`, estimasi sisa
+  baca. Tombol layar penuh di HUD hanya keluar dari fullscreen, bukan dari
+  Mode Baca. (`Ctrl+Shift+R` tetap ditangani bila browser tidak menelannya
+  sebagai muat-ulang paksa.)
 - **Auto-save** (interval 0,5–5 detik, bisa diatur) + **flush otomatis saat tab ditutup**
 - Statistik kata (tanda baca yang berdiri sendiri tidak dihitung)
 - Ekspor **TXT / PDF / DOCX** — per bab atau seluruh novel (format tebal/miring/
@@ -98,7 +102,8 @@ python3 -m http.server 8000
 | `Ctrl+S` | Simpan sekarang |
 | `Ctrl+B` / `Ctrl+I` | Tebal / Miring pada seleksi |
 | `Ctrl+Shift+F` / `F9` | Mode Fokus (toggle) |
-| `Ctrl+Shift+R` / `F10` | Mode Baca (toggle) |
+| `Ctrl+Alt+R` / `F10` | Mode Baca (toggle). `Ctrl+Shift+R` juga, kecuali browser memakainya untuk muat ulang |
+| `Spasi` / `Shift+Spasi` | Gulir halaman bawah/atas (Mode Baca). Di ujung bab, lanjut/kembali bab |
 | `Alt+←` / `Alt+→` | Bab sebelum/sesudah (saat Mode Baca) |
 | `Tab` / `Shift+Tab` | Indent / un-indent **per paragraf** pada seleksi |
 | `Alt+↑` / `Alt+↓` | Pindahkan bab (saat fokus di daftar bab) |
@@ -131,7 +136,7 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 89 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 95 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/

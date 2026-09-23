@@ -863,37 +863,57 @@ html.focus-mode.parafocus-on #editor.has-focus-current > :not(.focus-current) { 
 
 /* scrollbar nyaris tak terlihat sampai di-hover */
 html.focus-mode #editor::-webkit-scrollbar-thumb,
-html.reader-mode #editor-wrap::-webkit-scrollbar-thumb { background: transparent; }
+html.reader-mode #reader-view::-webkit-scrollbar-thumb { background: transparent; }
 html.focus-mode #editor:hover::-webkit-scrollbar-thumb,
-html.reader-mode #editor-wrap:hover::-webkit-scrollbar-thumb { background: var(--border); }
+html.reader-mode #reader-view:hover::-webkit-scrollbar-thumb { background: var(--border); }
 
-/* ---- MODE BACA — halaman buku yang tenang ---- */
+/* ---- MODE BACA — halaman buku yang tenang ----
+   #reader-view ADALAH scrollport (tinggi terbatas, overflow-y auto).
+   Dulu gulungan ada di #editor-wrap dengan align-items:center: ilustrasi
+   lebar membuat min-content meledak, teks terpotong di kiri dan tidak
+   bisa digulung sampai awal baris. Jeda adegan (p.scene) juga kalah
+   spesifisitasnya dari `text-align: justify` sehingga "* * *" tidak
+   lagi di tengah, dan ::first-letter menimpa jeda/tanda kutip. */
 html.reader-mode #format-bar,
-html.reader-mode #editor { display: none !important; }
+html.reader-mode #editor,
+html.reader-mode #figure-bar { display: none !important; }
 html.reader-mode #editor-wrap {
   display: flex !important;
   flex-direction: column;
-  align-items: center;
-  overflow-y: auto;
-  background: var(--bg);
+  align-items: stretch;
   justify-content: flex-start;
+  overflow: hidden;
+  background: var(--bg);
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 html.reader-mode #reader-view {
   display: block !important;
-  max-width: 680px;
+  flex: 1 1 auto;
+  align-self: stretch;
   width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
   height: auto;
-  min-height: 100%;
-  padding: 9vh 40px 30vh;
+  margin: 0;
+  /* kolom ~680px di tengah, tanpa align-items:center yang memotong overflow */
+  padding: 9vh max(28px, calc((100% - 680px) / 2)) 30vh;
   font-size: var(--reader-size, 19px);
   line-height: 1.85;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: transparent;
+  scroll-padding-bottom: 18vh;
 }
+html.reader-mode #reader-view:focus,
+html.reader-mode #reader-view:focus-visible { outline: none; }
 html.reader-mode #reader-view.prose {
   font-family: var(--font-serif);
+  overflow-wrap: break-word;
 }
 html.reader-mode #reader-view.prose h1 {
   font-size: 1.9em;
@@ -904,6 +924,7 @@ html.reader-mode #reader-view.prose h1 {
   text-indent: 0;
 }
 html.reader-mode #reader-view.prose h1:first-child { margin-top: 0; }
+html.reader-mode #reader-view.prose h2 { text-align: start; }
 html.reader-mode #reader-view.prose p {
   text-align: justify;
   hyphens: auto;
@@ -911,10 +932,36 @@ html.reader-mode #reader-view.prose p {
   text-indent: 1.6em;
 }
 html.reader-mode #reader-view.prose p:first-of-type,
-html.reader-mode #reader-view.prose h1 + p { text-indent: 0; }
+html.reader-mode #reader-view.prose h1 + p,
+html.reader-mode #reader-view.prose h2 + p { text-indent: 0; }
 html.reader-mode #reader-view.prose p.gap { margin-top: 1.6em; }
-/* huruf awal bab tampil besar seperti cetakan buku */
-html.reader-mode #reader-view.prose > p:first-of-type::first-letter {
+/* jeda adegan harus tetap di tengah — aturan p { justify } di atas lebih
+   spesifik daripada .prose p.scene, jadi tanpa ini "* * *" menempel kiri */
+html.reader-mode #reader-view.prose p.scene {
+  text-align: center;
+  text-indent: 0;
+  letter-spacing: 0.35em;
+  margin: 1.6em 0;
+  hyphens: manual;
+}
+html.reader-mode #reader-view.prose blockquote {
+  text-align: start;
+  margin: 1.1em 0 1.1em 1.4em;
+}
+html.reader-mode #reader-view figure,
+html.reader-mode #reader-view figure img {
+  max-width: 100%;
+  min-width: 0;
+}
+/* huruf awal bab — hanya paragraf pembuka sungguhan (.reader-open),
+   bukan jeda adegan, kutipan, atau paragraf yang diawali tanda baca */
+html.reader-mode #reader-view.prose > p.reader-open {
+  text-indent: 0;
+}
+html.reader-mode #reader-view.prose > p.reader-open::first-line {
+  text-align: start;
+}
+html.reader-mode #reader-view.prose > p.reader-open::first-letter {
   font-size: 3em;
   float: left;
   line-height: 0.92;
@@ -1049,7 +1096,23 @@ html.reader-mode #toast {
   .immersive-hud { gap: 5px; padding: 6px 8px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
   .hud-meta { font-size: 12px; }
   .hud-hide-sm { display: none !important; }
-  #reader-pos { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+  /* posisi baca jangan dipotong jadi "Bab…" — baris sendiri di atas tombol */
+  #reader-hud {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 4px;
+    white-space: normal;
+  }
+  #reader-pos {
+    flex: 1 1 100%;
+    order: -1;
+    max-width: none;
+    overflow: visible;
+    text-overflow: unset;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
+  }
   #editor, #reader-view { padding: 28px 20px; }
   #editor { padding-top: 8px; }
   #editor[data-empty="true"]::before { left: 20px; right: 20px; top: 8px; }
