@@ -11,9 +11,17 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
 - Urutkan bab dengan **drag & drop** (mouse), **tahan-lalu-geser** (layar sentuh),
   atau **Alt + ↑/↓** (keyboard)
 - **Editor teks berformat (WYSIWYG)** — pengganti Markdown: panel format
-  (**Tebal**, **Miring**, **Subjudul**, **Kutipan**, **Jeda adegan**) menerapkan
-  format sungguhan; tidak ada `**`, `#`, atau penanda apa pun yang diketik/disimpan.
-  Tekan Enter untuk paragraf baru; baris kosong = jeda (mis. ganti adegan)
+  (**Tebal**, **Miring**, **Subjudul**, **Kutipan**, **Jeda adegan**,
+  **Ilustrasi**) menerapkan format sungguhan; tidak ada `**`, `#`, atau penanda
+  apa pun yang diketik/disimpan. Tekan Enter untuk paragraf baru; baris kosong =
+  jeda (mis. ganti adegan)
+- **Sisipkan Ilustrasi** — sematkan gambar ilustrasi tokoh/karakter di tengah
+  naskah: pilih berkas (PNG/JPEG/WebP/GIF), beri nama tokoh/keterangan, atur
+  ukuran (kecil/sedang/penuh). Gambar diperkecil & dikompres otomatis di
+  browser agar hemat `localStorage`, tersimpan menyatu dengan bab, tampil di
+  Mode Baca, dan ikut ke ekspor PDF & DOCX (di TXT menjadi baris keterangan).
+  Tempel (`Ctrl+V`) atau seret-lepas berkas gambar langsung ke posisi kursor
+  juga didukung
 - **Mode Fokus** (`Ctrl+Shift+F` / `F9`) & **Mode Baca** (`Ctrl+Shift+R` / `F10`) —
   imersif penuh: fullscreen otomatis, semua chrome (sidebar, toolbar, panel
   format, HUD) lenyap total dan hanya muncul saat ada aktivitas; kursor pun
@@ -32,13 +40,15 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   dipertahankan, atau diselamatkan jadi draf bila babnya ikut hilang)
 - Tema gelap/terang, ukuran font & tinggi baris bisa diatur
 - Bilingual: **Indonesia / English** (termasuk tooltip & label aksesibilitas)
-- **Aman**: isi bab melewati sanitasi allowlist ketat — hanya `p/h2/blockquote/
-  strong/em` yang hidup; script, handler acara, atribut berbahaya, dan tag asing
-  dibuang. Node DOM selalu dibangun ulang (tanpa `innerHTML` dari data pengguna).
-  Isi lama berupa teks polos tampil apa adanya (teks, bukan HTML); id dari file
-  backup divalidasi
+- **Aman**: isi bab melewati sanitasi allowlist ketat — hanya
+  `p/h2/blockquote/figure/img/strong/em` yang hidup; script, handler acara,
+  atribut berbahaya, dan tag asing dibuang. `src` gambar harus data URL gambar
+  atau `http(s)` — `javascript:`, `data:text/html`, dan SVG ditolak (teks
+  keterangannya diselamatkan jadi paragraf). Node DOM selalu dibangun ulang
+  (tanpa `innerHTML` dari data pengguna). Isi lama berupa teks polos tampil apa
+  adanya (teks, bukan HTML); id dari file backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 66 kasus (Node + jsdom) + CI
+- **Test suite** 81 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -57,6 +67,7 @@ Isi bab disimpan dalam satu bentuk kanonik (format `html`):
 | `<p class="scene">* * *</p>` | jeda adegan |
 | `<h2>` | subjudul bagian |
 | `<blockquote>` | kutipan |
+| `<figure class="fig-s\|fig-m\|fig-l">` | ilustrasi (gambar + keterangan) |
 | `<strong>` / `<em>` | tebal / miring |
 
 Isi lama (format `text`, tanpa properti format) tetap didukung penuh:
@@ -101,6 +112,7 @@ js/storage.js         Lapisan data (cache in-memory + localStorage, key: novel-w
 js/i18n.js            Terjemahan ID/EN (teks, placeholder, title, aria-label)
 js/icons.js           Ikon SVG stroke inline (tanpa emoji)
 js/text.js            Utilitas teks polos (paragraf, hitung kata)
+js/image.js           Utilitas ilustrasi: validasi src, kompresi canvas, siap ekspor
 js/richtext.js        Model blok + sanitasi allowlist + operasi seleksi (WYSIWYG)
 js/export.js          Modul ekspor (TXT / PDF / DOCX)
 js/app.js             Inti aplikasi (state, render, CRUD, editor, DnD, PWA)
@@ -117,11 +129,12 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 66 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 81 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
-jeda adegan, tanpa penyisipan penanda), regresi "Tab menghapus seleksi",
+jeda adegan, tanpa penyisipan penanda), ilustrasi (validasi src, kompresi,
+round-trip, ekspor), regresi "Tab menghapus seleksi",
 flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
 sanitasi (script/handler tidak ikut hidup), keamanan restore, HUD imersif
 (kata sesi, navigasi bab, progres baca, font baca, toggle persisten), ekspor
@@ -155,6 +168,30 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.5.0
+
+Fitur baru: **Sisipkan Ilustrasi** — ilustrasi tokoh/karakter di tengah naskah.
+
+- Tombol **Ilustrasi** di panel format membuka dialog: pilih berkas gambar
+  (PNG/JPEG/WebP/GIF), isi **nama tokoh/keterangan**, pilih ukuran
+  (kecil/sedang/penuh) — lalu gambar muncul di posisi kursor beserta
+  keterangannya, siap lanjut menulis di paragraf berikutnya.
+- **Hemat penyimpanan**: gambar diperkecil (sisi terpanjang ≤1280 px) dan
+  dikompres bertahap di canvas sampai muat di ±320 KB; gambar kecil
+  (<120 KB) dipakai apa adanya. Pengguna diperingatkan bila hasil tetap besar
+  atau data tersimpan mendekati kuota browser.
+- **Aman**: `src` gambar lolos allowlist ketat — `javascript:`,
+  `data:text/html`, dan SVG ditolak; atribut berbahaya (`onerror`, …) tidak
+  pernah ikut tersimpan. Bila gambar dibuang, teks keterangannya diselamatkan
+  jadi paragraf supaya tulisan tidak lenyap.
+- **Ikut ke ekspor**: gambar tersemat di PDF & DOCX (dengan keterangan rata
+  tengah); di TXT ilustrasi menjadi baris keterangan. Ilustrasi juga tampil di
+  Mode Baca dan tahan bongkar-muat bab (round-trip model blok).
+- Tempel (`Ctrl+V`) atau seret-lepas berkas gambar langsung menyisipkan
+  ilustrasi di posisi kursor.
+- 15 tes baru (model blok `figure`, sanitasi src, kompresi, ekspor, UI) —
+  total 81 kasus.
 
 ## Catatan Rilis v1.4.2
 

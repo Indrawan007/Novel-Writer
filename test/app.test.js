@@ -645,3 +645,154 @@ test('B-05: draf tidak dibuang bila belum ada bab tujuan', async () => {
   assert.match($('#toast').textContent, /Buka sebuah bab/i);
   assert.deepEqual(w.__errors, []);
 });
+
+/* ================= Ilustrasi (gambar ilustrasi tokoh/karakter) ================= */
+
+const PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+test('sisip ilustrasi: modal -> pratinjau -> figure di editor, tersimpan & tampil di Mode Baca', async () => {
+  const { w, $, S, nw } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  type(w, ed, 'Paragraf pembuka.');
+
+  // Tombol ilustrasi ada di panel format (bukan sintaks) dan membuka modal
+  assert.ok($('#format-bar #btn-image svg'), 'tombol ilustrasi memakai ikon SVG');
+  click(w, $('#btn-image'));
+  assert.equal($('#modal-image').hidden, false);
+  assert.equal($('#btn-insert-image').disabled, true, 'belum ada gambar -> tombol nonaktif');
+
+  // jsdom tidak punya canvas/Image: berkas diterima apa adanya lewat FileReader
+  setFileInput(w, $('#inp-img-file'), 'tokoh.png', 'isi-berkas-gambar', 'image/png');
+  await wait(150);
+  assert.equal($('#img-preview').hidden, false, 'pratinjau tampil');
+  assert.match($('#img-preview-el').getAttribute('src'), /^data:image\/png;base64,/);
+  assert.equal($('#btn-insert-image').disabled, false, 'gambar siap disisipkan');
+
+  $('#inp-img-caption').value = 'Nyai Ontosoroh';
+  $('input[name="img-size"][value="s"]').checked = true;
+  click(w, $('#btn-insert-image'));
+  await wait(60);
+  assert.equal($('#modal-image').hidden, true, 'modal tutup setelah menyisipkan');
+
+  const fig = $('#editor figure');
+  assert.ok(fig, 'ilustrasi masuk ke editor');
+  assert.equal(fig.className, 'fig-s');
+  assert.match(fig.querySelector('img').getAttribute('src'), /^data:image\/png;base64,/);
+  assert.equal(fig.querySelector('img').getAttribute('alt'), 'Nyai Ontosoroh');
+  assert.equal(fig.querySelector('img').getAttribute('contenteditable'), 'false');
+  assert.equal(fig.querySelector('figcaption').textContent, 'Nyai Ontosoroh');
+  assert.equal($('#editor').getAttribute('data-empty'), 'false', 'bab berilustrasi tidak dianggap kosong');
+
+  // langsung tersimpan (gambar ikut tersimpan di dalam bab)
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.match(ch.content, /^<p>Paragraf pembuka\.<\/p><figure class="fig-s">/);
+  assert.match(ch.content, /<figcaption>Nyai Ontosoroh<\/figcaption><\/figure>$/);
+  assert.doesNotMatch(ch.content, /contenteditable|draggable/);
+
+  // Mode Baca menampilkan ilustrasinya
+  click(w, $('#btn-reader'));
+  await wait(30);
+  assert.ok($('#reader-view figure img'), 'ilustrasi tampil di Mode Baca');
+  click(w, $('#btn-reader'));
+  await wait(30);
+  assert.deepEqual(w.__errors, []);
+  void nw;
+});
+
+test('ilustrasi: src berbahaya tidak pernah tersimpan (gambar dibuang, teks diselamatkan)', async () => {
+  const { w, $, S, nw } = await createApp({ seed: seedProject() });
+  const ed = $('#editor');
+  ed.innerHTML = '<p>teks</p>' +
+    '<img src="javascript:alert(1)" alt="tokoh jahat">' +
+    '<img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">' +
+    '<figure><img src="data:image/png;base64,***"><figcaption>Minke</figcaption></figure>';
+  ed.dispatchEvent(new w.Event('input', { bubbles: true }));
+  w.NovelWriter.flushNow();
+
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch.content, '<p>teks</p><p>tokoh jahat</p><p>Minke</p>',
+    'gambar berbahaya hilang, teksnya tidak ikut lenyap');
+  assert.doesNotMatch(ch.content, /javascript|svg|alert|onerror/i);
+  assert.deepEqual(w.__errors, []);
+  void nw;
+});
+
+test('ilustrasi: hook sisip menolak src tidak aman & ilustrasi tahan bongkar-muat bab', async () => {
+  const { w, $, $$, S, nw } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'Prosa.');
+
+  assert.equal(w.NovelWriter.insertFigure({ src: 'javascript:alert(1)' }), false, 'src berbahaya ditolak');
+  assert.equal($('#editor figure'), null);
+
+  assert.equal(w.NovelWriter.insertFigure({
+    src: PNG1, alt: 'Minke', caption: 'Minke', width: 900, height: 600, size: 'l'
+  }), true);
+
+  // pindah bab lalu kembali: ilustrasi tetap utuh (round-trip model blok)
+  const ch1 = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch1.content,
+    '<p>Prosa.</p><figure class="fig-l"><img src="' + PNG1 + '" alt="Minke" width="900" height="600">' +
+    '<figcaption>Minke</figcaption></figure>');
+  click(w, $$('#chapter-list li')[1]);
+  await wait(40);
+  click(w, $$('#chapter-list li')[0]);
+  await wait(40);
+  const img = $('#editor figure img');
+  assert.ok(img, 'ilustrasi kembali utuh setelah ganti bab');
+  assert.equal(img.getAttribute('width'), '900');
+  assert.equal($('#editor figure').className, 'fig-l');
+  assert.equal($('#stat-chapter').textContent, '2', 'kata dihitung dari teks (Prosa. + Minke)');
+  assert.deepEqual(w.__errors, []);
+  void nw;
+});
+
+test('ilustrasi besar diperkecil & dikompres otomatis; gambar kecil dipakai apa adanya', async () => {
+  const { w, dom } = await createApp({ seed: seedProject() });
+  const IMGU = w.NW.ImageUtil;
+
+  /* Canvas palsu: catat ukuran hasil gambar dan kembalikan data URL
+     yang kebesaran pada percobaan pertama, lalu muat pada percobaan kedua. */
+  const draws = [];
+  const proto = w.HTMLCanvasElement.prototype;
+  Object.defineProperty(proto, 'getContext', {
+    configurable: true,
+    value: () => ({
+      fillStyle: '#000',
+      fillRect() {},
+      drawImage(img, x, y, dw, dh) { draws.push([dw, dh]); }
+    })
+  });
+  let payload = 500000;                       // ≈375 KB -> di atas target 320 KB
+  Object.defineProperty(proto, 'toDataURL', {
+    configurable: true,
+    value: () => { const s = 'data:image/jpeg;base64,' + 'A'.repeat(payload); payload = 100000; return s; }
+  });
+  w.Image = class {
+    constructor() { this.complete = false; this.naturalWidth = 0; this.naturalHeight = 0; }
+    set src(v) { this._src = v; this.complete = true; this.naturalWidth = 3000; this.naturalHeight = 2000; }
+    get src() { return this._src; }
+  };
+
+  const besar = new w.File(['x'.repeat(5000)], 'besar.jpg', { type: 'image/jpeg' });
+  const out = await IMGU.fromFile(besar);
+  assert.deepEqual(draws, [[1280, 853], [1100, 733]], 'diperkecil bertahap sampai muat di target');
+  assert.match(out.src, /^data:image\/jpeg;base64,/, 'hasil enkode jadi JPEG');
+  assert.equal(out.width, 1100);
+  assert.equal(out.height, 733);
+  assert.equal(out.over, false, 'hasil akhir di bawah batas lunak');
+
+  // Gambar kecil (png) tidak dikode ulang: ukuran asli & transparansi terjaga
+  const kecil = new w.File(['x'.repeat(200)], 'kecil.png', { type: 'image/png' });
+  const out2 = await IMGU.fromFile(kecil);
+  assert.match(out2.src, /^data:image\/png;base64,/, 'tidak diubah jadi JPEG');
+  assert.equal(draws.length, 2, 'gambar kecil tidak melewati canvas');
+
+  // Berkas bukan gambar & berkas kebesaran ditolak dengan kode yang jelas
+  await assert.rejects(() => IMGU.fromFile(new w.File(['x'], 'a.gif', { type: 'image/svg+xml' })),
+    (e) => e.code === 'type');
+  const raksasa = new w.File(['x'], 'raksasa.png', { type: 'image/png' });
+  Object.defineProperty(raksasa, 'size', { value: 99 * 1024 * 1024 });
+  await assert.rejects(() => IMGU.fromFile(raksasa), (e) => e.code === 'size');
+
+  dom.window.close();
+});

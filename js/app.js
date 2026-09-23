@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.2';
+  const VERSION = '1.5.0';
 
   // ============ STATE ============
   let activeProjectId = Storage.getSettings().lastProject;
@@ -30,6 +30,8 @@
   let idleTimer = null;     // pewaktu sembunyi-otomatis chrome imersif
   let peekTimer = null;     // pewaktu intipan toolbar
   const hintShown = { focus: false, reader: false }; // petunjuk sekali per sesi
+  let pendingImage = null;  // ilustrasi yang sudah diproses, menunggu disisipkan
+  let pendingRange = null;  // posisi kursor editor saat modal ilustrasi dibuka
 
   // ============ DOM REFS ============
   const $ = (s, p) => (p || document).querySelector(s);
@@ -49,6 +51,13 @@
     emptyTitle:    $('#empty-title'),
     emptyDesc:     $('#empty-desc'),
     emptyAction:   $('#btn-empty-action'),
+    // ---- ilustrasi (gambar) ----
+    inpImgFile:    $('#inp-img-file'),
+    inpImgCaption: $('#inp-img-caption'),
+    imgPreview:    $('#img-preview'),
+    imgPreviewEl:  $('#img-preview-el'),
+    imgMeta:       $('#img-meta'),
+    btnInsertImg:  $('#btn-insert-image'),
     toolbarTitle:  $('#toolbar-title'),
     statChapter:   $('#stat-chapter'),
     statTotal:     $('#stat-total'),
@@ -880,6 +889,7 @@
     else if (fmt === 'heading') ok = RichText.toggleBlock(ed, 'h2');
     else if (fmt === 'quote') ok = RichText.toggleBlock(ed, 'blockquote');
     else if (fmt === 'scene') ok = RichText.insertSceneBreak(ed);
+    else if (fmt === 'image') { openImageModal(); return; }
     if (ok) {
       markDirty();
       updateToolbar();
@@ -915,6 +925,163 @@
       e.preventDefault();
       markDirty();
     }
+  }
+
+  // ============ ILUSTRASI (gambar ilustrasi tokoh/karakter) ============
+  /* Gambar disimpan MENYATU dengan bab (data URL di dalam HTML kanonik),
+     jadi ikut tersimpan, dicadangkan, dan dipulihkan seperti teks lain.
+     Karena localStorage sempit (≈5 MB), berkas diperkecil & dikompres
+     lebih dulu (js/image.js) dan pengguna diperingatkan bila kebesaran. */
+
+  /** Simpan posisi kursor editor sebelum modal mengalihkan fokus. */
+  function saveEditorRange() {
+    try {
+      const sel = document.getSelection();
+      if (!sel || !sel.rangeCount || !dom.editor) return null;
+      const r = sel.getRangeAt(0);
+      if (!r || !dom.editor.contains(r.commonAncestorContainer)) return null;
+      return r.cloneRange();
+    } catch { return null; }
+  }
+
+  /** Kembalikan kursor ke posisi yang disimpan (bila masih di dalam editor). */
+  function restoreEditorRange() {
+    if (!pendingRange || !dom.editor) return;
+    try {
+      if (!dom.editor.contains(pendingRange.commonAncestorContainer)) return;
+      const sel = document.getSelection();
+      if (!sel) return;
+      sel.removeAllRanges();
+      sel.addRange(pendingRange);
+    } catch {}
+  }
+
+  function setImagePreview(src, meta) {
+    if (dom.imgPreview && dom.imgPreviewEl) {
+      if (src) {
+        dom.imgPreviewEl.setAttribute('src', src);
+        dom.imgPreview.hidden = false;
+      } else {
+        dom.imgPreview.hidden = true;
+        dom.imgPreviewEl.removeAttribute('src');
+      }
+    }
+    // "1200 × 800 px • 180 KB" — penulis tahu apa yang akan tersimpan
+    if (dom.imgMeta) {
+      if (src && meta) { dom.imgMeta.textContent = meta; dom.imgMeta.hidden = false; }
+      else { dom.imgMeta.textContent = ''; dom.imgMeta.hidden = true; }
+    }
+  }
+
+  /** Ringkasan ukuran gambar untuk pratinjau. */
+  function imageMeta(img) {
+    if (!img) return '';
+    const parts = [];
+    if (img.width > 0 && img.height > 0) parts.push(img.width + ' \u00d7 ' + img.height + ' px');
+    if (img.bytes > 0) parts.push(Math.max(1, Math.round(img.bytes / 1024)) + ' KB');
+    return parts.join(' \u2022 ');
+  }
+
+  function openImageModal() {
+    pendingImage = null;
+    pendingRange = saveEditorRange();
+    if (dom.inpImgFile) dom.inpImgFile.value = '';
+    if (dom.inpImgCaption) dom.inpImgCaption.value = '';
+    setImagePreview(null);
+    const mid = $('input[name="img-size"][value="m"]');
+    if (mid) mid.checked = true;
+    if (dom.btnInsertImg) dom.btnInsertImg.disabled = true;
+    openModal('modal-image');
+  }
+
+  function resetImageModal() {
+    pendingImage = null;
+    pendingRange = null;
+    setImagePreview(null);
+    if (dom.btnInsertImg) dom.btnInsertImg.disabled = true;
+  }
+
+  /**
+   * Berkas gambar -> pratinjau. Kesalahan (jenis/ukuran/gagal baca) selalu
+   * diberitahukan: modal tidak pernah diam saja.
+   */
+  async function prepareIllustration(file) {
+    if (!file) return null;
+    if (!ImageUtil.isImageFile(file)) { toast(t('imageBadType'), 5000, 'error'); return null; }
+    if (Number(file.size) > ImageUtil.MAX_FILE_BYTES) { toast(t('imageTooBig'), 5000, 'error'); return null; }
+    toast(t('imageProcessing'), 4000);
+    try {
+      const img = await ImageUtil.fromFile(file);
+      if (!img || !ImageUtil.safeSrc(img.src)) throw new Error('invalid');
+      pendingImage = img;
+      setImagePreview(img.src, imageMeta(img));
+      if (dom.btnInsertImg) dom.btnInsertImg.disabled = false;
+      if (img.over) toast(t('imageLarge'), 7000, 'error');
+      return img;
+    } catch (err) {
+      pendingImage = null;
+      setImagePreview(null);
+      if (dom.btnInsertImg) dom.btnInsertImg.disabled = true;
+      const code = err && err.code;
+      toast(code === 'size' ? t('imageTooBig')
+        : code === 'type' ? t('imageBadType')
+          : t('imageFail'), 5000, 'error');
+      return null;
+    }
+  }
+
+  /** Sisipkan ilustrasi yang sudah disiapkan ke editor. */
+  function placeIllustration(img, opts) {
+    const o = opts || {};
+    const ok = RichText.insertFigure(dom.editor, {
+      src: img.src,
+      alt: o.caption || '',
+      caption: o.caption || '',
+      width: img.width,
+      height: img.height,
+      size: o.size || 'm'
+    });
+    if (!ok) { toast(t('imageFail'), 5000, 'error'); return false; }
+    markDirty();
+    const saved = saveCurrentChapter({ silent: true });
+    if (!saved) {
+      toast(Storage.lastError() === 'quota' ? t('storageFull') : t('storageSaveFail'), 8000, 'error');
+    } else if (!o.silent) {
+      toast(t('imageInserted'), 2500);
+    }
+    warnIfStorageHeavy();
+    return saved;
+  }
+
+  /** Ingatkan bila data tersimpan mendekati kuota browser (gambar besar). */
+  function warnIfStorageHeavy() {
+    try {
+      if (typeof Storage.approxBytes !== 'function') return;
+      if (Storage.approxBytes() > 4 * 1024 * 1024) toast(t('storageHeavy'), 7000, 'error');
+    } catch {}
+  }
+
+  /** Tombol "Sisipkan" pada modal ilustrasi. */
+  function insertIllustration() {
+    if (!pendingImage) { toast(t('imagePick'), 3000, 'error'); return; }
+    const img = pendingImage;
+    const caption = String(dom.inpImgCaption?.value || '').trim().slice(0, 160);
+    const size = ($('input[name="img-size"]:checked')?.value) || 'm';
+    closeModal();
+    restoreEditorRange();
+    placeIllustration(img, { caption, size });
+    resetImageModal();
+    try { dom.editor?.focus(); } catch {}
+  }
+
+  /** Tempel (paste) berkas gambar langsung ke posisi kursor. */
+  async function pasteIllustration(file) {
+    if (!file || !dom.editor || isReaderMode) return;
+    const img = await prepareIllustration(file);
+    if (!img) return;
+    placeIllustration(img, { caption: '', size: 'm' });
+    resetImageModal();
+    try { dom.editor.focus(); } catch {}
   }
 
   // ============ MODE FOKUS & MODE BACA (imersif: fullscreen, nol gangguan) ============
@@ -1682,6 +1849,27 @@
     });
 
     dom.editor?.addEventListener('input', markDirty);
+    // Tempel berkas gambar -> langsung jadi ilustrasi di posisi kursor
+    dom.editor?.addEventListener('paste', (e) => {
+      const files = (typeof ImageUtil !== 'undefined')
+        ? ImageUtil.imageFiles(e.clipboardData && e.clipboardData.files) : [];
+      if (!files.length) return;
+      e.preventDefault();
+      pasteIllustration(files[0]);
+    });
+    // Seret-lepas berkas gambar -> ilustrasi (dan cegah browser membuka
+    // berkasnya, yang bisa menggantikan halaman dan mengganggu penulisan)
+    dom.editor?.addEventListener('dragover', (e) => {
+      const types = e.dataTransfer && e.dataTransfer.types;
+      if (types && Array.prototype.indexOf.call(types, 'Files') >= 0) e.preventDefault();
+    });
+    dom.editor?.addEventListener('drop', (e) => {
+      const files = (e.dataTransfer && typeof ImageUtil !== 'undefined')
+        ? ImageUtil.imageFiles(e.dataTransfer.files) : [];
+      if (!files.length) return;
+      e.preventDefault();
+      pasteIllustration(files[0]);
+    });
     dom.editor?.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') { handleTab(e); return; }
       // Ctrl/Cmd+B, I = tebal / miring (format asli, tanpa penanda)
@@ -1702,6 +1890,13 @@
       });
     }
     document.addEventListener('selectionchange', updateToolbar);
+
+    // ---- Modal sisip ilustrasi ----
+    dom.inpImgFile?.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) prepareIllustration(file);
+    });
+    dom.btnInsertImg?.addEventListener('click', insertIllustration);
 
     dom.btnFocus?.addEventListener('click', toggleFocusMode);
     dom.btnReader?.addEventListener('click', toggleReaderMode);
@@ -2073,6 +2268,14 @@
       saveCurrentChapter,
       flushNow,
       renderAll,
+      openImageModal,
+      /** Sisipkan ilustrasi jadi (dipakai pengujian & otomasi). */
+      insertFigure(data) {
+        if (!RichText.insertFigure(dom.editor, data || {})) return false;
+        markDirty();
+        saveCurrentChapter({ silent: true });
+        return true;
+      },
       get state() {
         return { activeProjectId, activeChapterId, isFocusMode, isReaderMode, dirty, typewriterOn, paraFocusOn, readerFontSize };
       }

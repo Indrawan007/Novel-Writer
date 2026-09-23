@@ -38,6 +38,7 @@
     scene:    svg('<path d="M6 12h.01M12 12h.01M18 12h.01"/>', 15),
     chevronLeft:  svg('<path d="M15 18l-6-6 6-6"/>', 15),
     chevronRight: svg('<path d="M9 18l6-6-6-6"/>', 15),
+    image:        svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16.5L16 11.5L5.5 20"/>', 15),
     typewriter:   svg('<rect x="3" y="11" width="18" height="8" rx="2"/><path d="M7 15h.01M11 15h.01M15 15h.01M7 7.5h10M9.5 7.5v-2h5v2"/>', 15),
     paragraph:    svg('<path d="M10 20V7a3 3 0 0 1 3-3h4a4 4 0 0 1 0 8h-7"/><path d="M10 4v16"/>', 15)
   };

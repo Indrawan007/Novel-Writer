@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadLogic } from './helpers.mjs';
 
-const { Storage, TextUtil, RichText, Exporter, sandbox } = await loadLogic();
+const { Storage, TextUtil, RichText, Exporter, ImageUtil, sandbox } = await loadLogic();
 
 /* Objek dari konteks vm punya prototype realm lain -> normalkan lewat JSON
    sebelum deepEqual (strict membandingkan prototype). */
@@ -359,4 +359,190 @@ test('B-04: hitung kata dialog restore = hitungan aplikasi (entitas & tanda baca
   for (const c of ['<p>—</p>', '<p>a &amp; b</p>', '<p>Halo <strong>dunia</strong>.</p>', '<p>&lt;tag&gt;</p>']) {
     assert.equal(sum(c), app(c), `ringkasan harus sama dengan aplikasi untuk ${c}`);
   }
+});
+
+/* ================= Ilustrasi (gambar ilustrasi tokoh/karakter) ================= */
+
+/* PNG 1x1 yang sah — cukup untuk menguji alur tanpa berkas sungguhan. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+test('ImageUtil.safeSrc: allowlist ketat — hanya data URL gambar & http(s)', () => {
+  assert.equal(ImageUtil.safeSrc(PNG), PNG);
+  assert.equal(ImageUtil.safeSrc('https://example.com/tokoh.jpg'), 'https://example.com/tokoh.jpg');
+  assert.equal(ImageUtil.safeSrc('javascript:alert(1)'), '');
+  assert.equal(ImageUtil.safeSrc('vbscript:msgbox(1)'), '');
+  assert.equal(ImageUtil.safeSrc('data:text/html;base64,PHNjcmlwdD4='), '');
+  assert.equal(ImageUtil.safeSrc('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='), '', 'SVG bisa bawa skrip — ditolak');
+  assert.equal(ImageUtil.safeSrc('data:image/png;base64,****'), '');
+  assert.equal(ImageUtil.safeSrc(''), '');
+  assert.equal(ImageUtil.safeSrc(null), '');
+});
+
+test('ImageUtil: isImageFile, fit, dan bytesOf', () => {
+  const f = (name, type) => ({ name, type, size: 10 });
+  assert.equal(ImageUtil.isImageFile(f('a.png', 'image/png')), true);
+  assert.equal(ImageUtil.isImageFile(f('a.JPG', 'image/jpeg')), true);
+  assert.equal(ImageUtil.isImageFile(f('a.svg', 'image/svg+xml')), false);
+  assert.equal(ImageUtil.isImageFile(f('a.txt', 'text/plain')), false);
+  assert.equal(ImageUtil.isImageFile(f('a.png', '')), true, 'tanpa MIME: ekstensi dipakai');
+  assert.equal(ImageUtil.isImageFile(null), false);
+
+  assert.deepEqual(plain(ImageUtil.fit(4000, 2000, 1000)), { width: 1000, height: 500 });
+  assert.deepEqual(plain(ImageUtil.fit(400, 200, 1000)), { width: 400, height: 200 }, 'tidak pernah membesar');
+  assert.deepEqual(plain(ImageUtil.fit(0, 0, 800)), { width: 800, height: 800 });
+  assert.equal(ImageUtil.bytesOf('data:image/png;base64,' + 'A'.repeat(4000)), 3000);
+  assert.equal(ImageUtil.bytesOf(''), 0);
+});
+
+test('ImageUtil.docxImage: data URL -> byte + ukuran yang muat di halaman', () => {
+  const shot = ImageUtil.docxImage(PNG, 1200, 800, 500, 680);
+  assert.ok(shot, 'gambar data URL bisa diekspor');
+  assert.equal(shot.type, 'png');
+  assert.equal(shot.width, 500);
+  assert.equal(shot.height, 333);
+  assert.ok(shot.data && shot.data.length > 0, 'byte gambar ikut');
+  // gambar kecil tidak diperbesar
+  const kecil = ImageUtil.docxImage(PNG, 60, 40, 500, 680);
+  assert.equal(kecil.width, 60);
+  assert.equal(kecil.height, 40);
+  // byte hasil decode = ukuran asli berkas (PNG 1x1 ini 70 byte)
+  assert.equal(ImageUtil.docxImage(PNG, 1200, 800, 500, 680).data.length, 70);
+  // tautan luar tidak diunduh saat ekspor -> keterangan saja
+  assert.equal(ImageUtil.docxImage('https://example.com/a.png', 100, 100, 500, 680), null);
+});
+
+test('RichText: blok ilustrasi (figure) tersimpan utuh — src, ukuran, keterangan', () => {
+  const html = '<figure class="fig-l"><img src="' + PNG + '" alt="Nyai" width="1200" height="800">' +
+    '<figcaption>Nyai Ontosoroh</figcaption></figure>';
+  assert.equal(RichText.sanitize(html), html, 'bentuk kanonik stabil (round-trip)');
+  const [b] = RichText.blocks(html);
+  assert.equal(b.tag, 'figure');
+  assert.equal(b.src, PNG);
+  assert.equal(b.alt, 'Nyai');
+  assert.equal(b.caption, 'Nyai Ontosoroh');
+  assert.equal(b.size, 'l');
+  assert.equal(b.width, 1200);
+  assert.equal(b.height, 800);
+});
+
+test('RichText: ukuran tak dikenal -> sedang; <img> lepas jadi blok ilustrasi', () => {
+  assert.equal(RichText.sanitize('<figure class="fig-aneh"><img src="' + PNG + '"></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt=""></figure>');
+  assert.equal(RichText.sanitize('<p>teks</p><img src="' + PNG + '" alt="Tokoh">'),
+    '<p>teks</p><figure class="fig-m"><img src="' + PNG + '" alt="Tokoh"></figure>');
+  // keterangan dipangkas & dirapikan
+  assert.equal(RichText.sanitize('<figure><img src="' + PNG + '"><figcaption>  Minke\n  Annelis  </figcaption></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt="Minke Annelis"><figcaption>Minke Annelis</figcaption></figure>');
+});
+
+test('RichText: src gambar berbahaya dibuang, teks keterangan diselamatkan', () => {
+  assert.equal(RichText.sanitize('<img src="javascript:alert(1)" alt="tokoh">'), '<p>tokoh</p>');
+  assert.equal(RichText.sanitize('<figure><img src="x" onerror="alert(1)"><figcaption>Minke</figcaption></figure>'),
+    '<p>Minke</p>', 'teks keterangan tidak ikut lenyap bersama gambar');
+  assert.equal(RichText.sanitize('<figure><img src="data:text/html;base64,PHNjcmlwdD4="></figure>'), '');
+  assert.equal(RichText.sanitize('<p>aman</p><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">'), '<p>aman</p>');
+  // atribut berbahaya pada gambar yang sah pun tidak pernah ikut tersimpan
+  assert.equal(RichText.sanitize('<img src="' + PNG + '" onerror="alert(1)" onload="x()" alt="a">'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt="a"></figure>');
+  // teks yang diketik sebagai alt tetap teks
+  assert.equal(RichText.sanitize('<figure><img src="' + PNG + '" alt="&quot;&lt;b&gt;&quot;">' +
+    '<figcaption>&lt;b&gt;</figcaption></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt="&quot;&lt;b&gt;&quot;"><figcaption>&lt;b&gt;</figcaption></figure>');
+});
+
+test('RichText.toPlainText: ilustrasi jadi baris keterangan (ekspor .txt)', () => {
+  assert.equal(
+    RichText.toPlainText('<p>Prosa.</p><figure class="fig-m"><img src="' + PNG + '">' +
+      '<figcaption>Nyai Ontosoroh</figcaption></figure><p>Lanjut.</p>'),
+    'Prosa.\n\nNyai Ontosoroh\n\nLanjut.');
+  // tanpa keterangan: tidak meninggalkan baris kosong sisa
+  assert.equal(RichText.toPlainText('<p>Prosa.</p><figure><img src="' + PNG + '"></figure><p>Lanjut.</p>'),
+    'Prosa.\nLanjut.');
+  assert.equal(RichText.wordCount('<figure><img src="' + PNG + '"><figcaption>Minke</figcaption></figure>', 'html'), 1);
+});
+
+test('RichText: operasi blok tidak pernah merusak ilustrasi', () => {
+  // figure bukan blok teks: indent/judul/kutipan tidak menyentuhnya
+  const el = sandbox.document.createElement('div');
+  el.innerHTML = '<figure><img src="' + PNG + '"><figcaption>Minke</figcaption></figure>';
+  assert.equal(RichText.blocks(el.innerHTML).length, 1);
+  assert.equal(RichText.sanitize(el.innerHTML).indexOf('<figure'), 0);
+  // dan tidak pernah ada innerHTML yang menyisipkan skrip saat dibangun ulang
+  const host = sandbox.document.createElement('div');
+  host.appendChild(RichText.buildNodes(host, RichText.blocks(
+    '<figure><img src="' + PNG + '" alt="a"><figcaption>Minke</figcaption></figure>')));
+  const fig = host.querySelector('figure');
+  assert.ok(fig && fig.querySelector('img'), 'node figure dibangun ulang');
+  assert.equal(fig.querySelector('img').getAttribute('src'), PNG);
+  assert.equal(fig.querySelector('img').getAttribute('contenteditable'), 'false', 'gambar utuh: satu hapus = satu ilustrasi');
+  assert.equal(fig.querySelector('figcaption').textContent, 'Minke');
+});
+
+test('Exporter.buildText: ilustrasi jadi baris keterangan di .txt', () => {
+  Storage.saveProject({
+    id: 'gbr', title: 'Bergambar', author: '', chapters: [{
+      id: 'g1', title: 'Bab Satu', format: 'html', order: 1,
+      content: '<p>Prosa.</p><figure class="fig-m"><img src="' + PNG + '" alt="">' +
+        '<figcaption>Nyai Ontosoroh</figcaption></figure><p>Lanjut.</p>'
+    }]
+  });
+  const txt = Exporter.buildText(Exporter.getContent('all', 'gbr'));
+  assert.match(txt, /Prosa\.\n\nNyai Ontosoroh\n\nLanjut\./);
+  assert.doesNotMatch(txt, /data:image|<figure|<img/, 'berkas .txt polos tanpa sisa HTML');
+});
+
+test('Exporter.buildDocxChildren: ilustrasi ikut ke DOCX (gambar + keterangan)', () => {
+  class Paragraph { constructor(o) { Object.assign(this, o); } }
+  class TextRun { constructor(o) { Object.assign(this, o); } }
+  class ImageRun { constructor(o) { Object.assign(this, o); this.__image = true; } }
+  const lib = {
+    Paragraph, TextRun, ImageRun,
+    HeadingLevel: { HEADING_1: 'H1', HEADING_2: 'H2' },
+    AlignmentType: { CENTER: 'center', JUSTIFIED: 'both' },
+    convertInchesToTwip: (n) => n * 1440
+  };
+  const data = {
+    title: 'X', author: '',
+    sections: [{
+      heading: null, format: 'html',
+      content: '<p>Prosa.</p><figure class="fig-s"><img src="' + PNG + '" width="1200" height="800">' +
+        '<figcaption>Nyai Ontosoroh</figcaption></figure><p>Lanjut.</p>'
+    }]
+  };
+  const kids = Exporter.buildDocxChildren(data, lib);
+  const img = kids.find(p => (p.children || []).some(c => c && c.__image));
+  assert.ok(img, 'gambar disematkan di paragraf sendiri');
+  assert.equal(img.children[0].type, 'png');
+  assert.equal(img.children[0].transformation.width, 500);
+  assert.equal(img.children[0].transformation.height, 333);
+  assert.ok(img.children[0].data.length > 0, 'byte gambar ikut');
+  const cap = kids.find(p => (p.children || []).some(r => r.text === 'Nyai Ontosoroh'));
+  assert.ok(cap, 'keterangan jadi paragraf sendiri');
+  assert.equal(cap.alignment, 'center');
+
+  // Tanpa dukungan gambar (pustaka lama): ekspor tetap jalan, keterangan saja
+  const plain2 = Exporter.buildDocxChildren(data, { ...lib, ImageRun: undefined });
+  const texts = plain2.map(p => (p.children || []).map(r => r.text).join('')).filter(Boolean);
+  assert.deepEqual(plain(texts), ['X', 'Prosa.', 'Nyai Ontosoroh', 'Lanjut.']);
+  assert.equal(plain2.some(p => (p.children || []).some(c => c && c.__image)), false);
+
+  // Gambar dari tautan luar tidak diunduh -> tidak pernah merusak berkas
+  const remote = Exporter.buildDocxChildren({
+    title: 'X', author: '',
+    sections: [{ heading: null, format: 'html', content: '<figure><img src="https://example.com/a.png"><figcaption>Minke</figcaption></figure>' }]
+  }, lib);
+  assert.equal(remote.some(p => (p.children || []).some(c => c && c.__image)), false);
+  assert.ok(remote.some(p => (p.children || []).some(r => r.text === 'Minke')));
+});
+
+test('RichText: teks asing di dalam <figure> tidak ikut hilang (Enter di keterangan)', () => {
+  // Browser bisa menyisipkan <p> di dalam figure saat Enter ditekan pada
+  // keterangan — tulisan itu harus selamat, bukan lenyap bersama gambar.
+  assert.equal(
+    RichText.sanitize('<figure><img src="' + PNG + '"><figcaption>Minke</figcaption><p>tulisan penting</p></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt="Minke"><figcaption>Minke</figcaption></figure>' +
+    '<p>tulisan penting</p>');
+  // teks lepas di dalam figure pun diselamatkan
+  assert.equal(RichText.sanitize('<figure><img src="' + PNG + '">sisa teks</figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt=""></figure><p>sisa teks</p>');
 });
