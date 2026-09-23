@@ -32,6 +32,7 @@
   const hintShown = { focus: false, reader: false }; // petunjuk sekali per sesi
   let pendingImage = null;  // ilustrasi yang sudah diproses, menunggu disisipkan
   let pendingRange = null;  // posisi kursor editor saat modal ilustrasi dibuka
+  let activeFigure = null;  // <figure> di editor yang menampilkan bilah aksi (ganti/hapus)
 
   // ============ DOM REFS ============
   const $ = (s, p) => (p || document).querySelector(s);
@@ -58,6 +59,11 @@
     imgPreviewEl:  $('#img-preview-el'),
     imgMeta:       $('#img-meta'),
     btnInsertImg:  $('#btn-insert-image'),
+    // ---- bilah aksi ilustrasi (ganti/hapus) ----
+    figureBar:     $('#figure-bar'),
+    btnFigReplace: $('#btn-fig-replace'),
+    btnFigDelete:  $('#btn-fig-delete'),
+    inpFigFile:    $('#inp-fig-file'),
     toolbarTitle:  $('#toolbar-title'),
     statChapter:   $('#stat-chapter'),
     statTotal:     $('#stat-total'),
@@ -318,6 +324,9 @@
   function renderEditor() {
     const proj = Storage.getProject(activeProjectId);
     const ch = proj?.chapters?.find(c => c.id === activeChapterId);
+
+    // Konten editor diganti total — bilah aksi ilustrasi tak bisa bertahan
+    hideFigureBar();
 
     if (!ch) {
       if (dom.editorWrap) dom.editorWrap.hidden = true;
@@ -802,6 +811,8 @@
     RichText.syncEmpty(dom.editor);
     updateStats();               // ringan: dihitung dari DOM, bukan parse ulang
     if (isFocusMode) updateFocusCurrent();
+    // ketikan bisa menggeser tata letak — bilah aksi tetap mengiring ilustrasi
+    if (activeFigure && figureBarValid()) positionFigureBar(activeFigure);
     autoSave();
   }
 
@@ -983,6 +994,7 @@
   }
 
   function openImageModal() {
+    hideFigureBar();               // bilah aksi ilustrasi lama tak relevan lagi
     pendingImage = null;
     pendingRange = saveEditorRange();
     if (dom.inpImgFile) dom.inpImgFile.value = '';
@@ -1001,18 +1013,44 @@
     if (dom.btnInsertImg) dom.btnInsertImg.disabled = true;
   }
 
+  /** Error ber-`code` untuk jalur berkas gambar (selaras dengan ImageUtil). */
+  function imageErr(code) {
+    const e = new Error(code);
+    e.code = code;
+    return e;
+  }
+
+  /** Pesan toast sesuai kode error berkas gambar. */
+  function imageErrorToast(err) {
+    const code = err && err.code;
+    return code === 'size' ? t('imageTooBig')
+      : code === 'type' ? t('imageBadType')
+        : t('imageFail');
+  }
+
+  /**
+   * Berkas gambar -> { src, width, height, bytes, over }: divalidasi,
+   * diperkecil & dikompres (js/image.js). Melempar Error ber-`code`:
+   * 'type' | 'size' | 'read'. Dipakai modal sisip MAUPUN tombol "Ganti".
+   */
+  async function processImageFile(file) {
+    if (!file) throw imageErr('type');
+    if (!ImageUtil.isImageFile(file)) throw imageErr('type');
+    if (Number(file.size) > ImageUtil.MAX_FILE_BYTES) throw imageErr('size');
+    const img = await ImageUtil.fromFile(file);
+    if (!img || !ImageUtil.safeSrc(img.src)) throw imageErr('read');
+    return img;
+  }
+
   /**
    * Berkas gambar -> pratinjau. Kesalahan (jenis/ukuran/gagal baca) selalu
    * diberitahukan: modal tidak pernah diam saja.
    */
   async function prepareIllustration(file) {
     if (!file) return null;
-    if (!ImageUtil.isImageFile(file)) { toast(t('imageBadType'), 5000, 'error'); return null; }
-    if (Number(file.size) > ImageUtil.MAX_FILE_BYTES) { toast(t('imageTooBig'), 5000, 'error'); return null; }
     toast(t('imageProcessing'), 4000);
     try {
-      const img = await ImageUtil.fromFile(file);
-      if (!img || !ImageUtil.safeSrc(img.src)) throw new Error('invalid');
+      const img = await processImageFile(file);
       pendingImage = img;
       setImagePreview(img.src, imageMeta(img));
       if (dom.btnInsertImg) dom.btnInsertImg.disabled = false;
@@ -1022,12 +1060,109 @@
       pendingImage = null;
       setImagePreview(null);
       if (dom.btnInsertImg) dom.btnInsertImg.disabled = true;
-      const code = err && err.code;
-      toast(code === 'size' ? t('imageTooBig')
-        : code === 'type' ? t('imageBadType')
-          : t('imageFail'), 5000, 'error');
+      toast(imageErrorToast(err), 5000, 'error');
       return null;
     }
+  }
+
+  /* ---- Bilah aksi ilustrasi (ganti gambar / hapus) ----
+     Klik sebuah ilustrasi di editor -> bilah kecil muncul di atasnya.
+     "Ganti" membuka pemilih berkas (gambar baru diproses lalu ditukar di
+     tempat — posisi, ukuran kelas, dan keterangan dipertahankan); "Hapus"
+     membuang ilustrasinya. Bilah lenyap saat klik di luar ilustrasi,
+     Esc, ganti bab, atau mode baca. */
+
+  function figureBarShown() {
+    return !!(dom.figureBar && !dom.figureBar.hidden &&
+      !dom.figureBar.classList.contains('is-hidden'));
+  }
+
+  /** Ilustrasi yang aktif masih ada & berada di editor yang tampil? */
+  function figureBarValid() {
+    return !!(activeFigure && activeFigure.isConnected &&
+      dom.editor && !dom.editor.hidden && dom.editor.contains(activeFigure));
+  }
+
+  /** Letakkan bilah di atas ilustrasi (di bawah bila tak muat di atas). */
+  function positionFigureBar(fig) {
+    const bar = dom.figureBar, wrap = dom.editorWrap, ed = dom.editor;
+    if (!bar || !wrap || !ed || !fig || !fig.isConnected) return;
+    const figR = fig.getBoundingClientRect();
+    const wrapR = wrap.getBoundingClientRect();
+    const edR = ed.getBoundingClientRect();
+    const barH = bar.offsetHeight || 40;
+    let top = figR.top - wrapR.top - barH - 8;
+    const minTop = edR.top - wrapR.top + 4;
+    if (top < minTop) top = figR.bottom - wrapR.top + 8;
+    bar.style.top = Math.max(0, top) + 'px';
+    const barW = bar.offsetWidth || 160;
+    const mid = figR.left + figR.width / 2 - wrapR.left;
+    let left = mid - barW / 2;
+    const maxLeft = wrap.clientWidth - barW - 6;
+    left = Math.max(6, Math.min(left, Math.max(6, maxLeft)));
+    bar.style.left = left + 'px';
+  }
+
+  function showFigureBar(fig) {
+    if (!dom.figureBar || !fig) return;
+    activeFigure = fig;
+    dom.figureBar.hidden = false;
+    dom.figureBar.classList.remove('is-hidden');
+    positionFigureBar(fig);
+  }
+
+  function hideFigureBar() {
+    activeFigure = null;
+    if (dom.figureBar) {
+      dom.figureBar.hidden = true;
+      dom.figureBar.classList.add('is-hidden');
+    }
+  }
+
+  /** Tombol "Ganti" pada bilah aksi: berkas baru -> gambar ditukar di tempat. */
+  async function replaceFigureImageFile(file) {
+    const fig = activeFigure;
+    if (!fig || !fig.isConnected || !dom.editor || !dom.editor.contains(fig)) {
+      hideFigureBar();
+      return;
+    }
+    if (!file) return;
+    toast(t('imageProcessing'), 4000);
+    try {
+      const img = await processImageFile(file);
+      const ok = RichText.replaceFigureImage(dom.editor, fig, {
+        src: img.src,
+        width: img.width,
+        height: img.height
+      });
+      if (!ok) throw imageErr('read');
+      markDirty();
+      const saved = saveCurrentChapter({ silent: true });
+      if (saved) toast(t('imageReplaced'), 2500);
+      else toast(Storage.lastError() === 'quota' ? t('storageFull') : t('storageSaveFail'), 8000, 'error');
+      if (img.over) toast(t('imageLarge'), 7000, 'error');
+      warnIfStorageHeavy();
+      // rasio gambar baru bisa mengubah tata letak — posisikan ulang bilah
+      requestAnimationFrame(() => {
+        if (figureBarShown() && fig.isConnected) positionFigureBar(fig);
+      });
+    } catch (err) {
+      toast(imageErrorToast(err), 5000, 'error');
+    }
+  }
+
+  /** Tombol "Hapus" pada bilah aksi: buang ilustrasi dari naskah. */
+  function deleteFigure() {
+    const fig = activeFigure;
+    hideFigureBar();
+    if (!fig || !fig.isConnected || !dom.editor || !dom.editor.contains(fig)) return;
+    const ok = RichText.removeFigure(dom.editor, fig);
+    if (!ok) return;
+    markDirty();
+    const saved = saveCurrentChapter({ silent: true });
+    if (saved) toast(t('imageDeleted'), 2500);
+    else toast(Storage.lastError() === 'quota' ? t('storageFull') : t('storageSaveFail'), 8000, 'error');
+    try { dom.editor.focus(); } catch {}
   }
 
   /** Sisipkan ilustrasi yang sudah disiapkan ke editor. */
@@ -1156,6 +1291,11 @@
       if (h && !h.hidden) h.classList.remove('is-hidden');
     });
     updateFocusFormatBar();
+    // bilah aksi ilustrasi ikut chrome imersif: muncul lagi saat ada aktivitas
+    if (!isReaderMode && activeFigure && figureBarValid() && !dom.figureBar.hidden) {
+      dom.figureBar.classList.remove('is-hidden');
+      positionFigureBar(activeFigure);
+    }
   }
 
   function concealImmersiveChrome() {
@@ -1165,6 +1305,7 @@
     const tb = document.querySelector('#toolbar');
     if (tb) tb.classList.remove('is-peek');
     if (dom.formatBar) dom.formatBar.classList.remove('is-visible');
+    if (dom.figureBar && !dom.figureBar.hidden) dom.figureBar.classList.add('is-hidden');
   }
 
   /** Setiap aktivitas pengguna me-reset pewaktu idle. */
@@ -1898,6 +2039,35 @@
     });
     dom.btnInsertImg?.addEventListener('click', insertIllustration);
 
+    // ---- Bilah aksi ilustrasi (ganti gambar / hapus) ----
+    // mousedown dicegat agar kursor/seleksi editor tidak hilang saat klik tombol
+    dom.figureBar?.addEventListener('mousedown', (e) => e.preventDefault());
+    dom.btnFigReplace?.addEventListener('click', () => {
+      if (!dom.inpFigFile) return;
+      dom.inpFigFile.value = '';   // berkas yang sama boleh dipilih ulang
+      dom.inpFigFile.click();
+    });
+    dom.inpFigFile?.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (file) replaceFigureImageFile(file);
+      e.target.value = '';
+    });
+    dom.btnFigDelete?.addEventListener('click', deleteFigure);
+    dom.figureBar?.addEventListener('keydown', (e) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteFigure(); }
+      else if (e.key === 'Escape') hideFigureBar();
+    });
+    // Klik ilustrasi -> bilah muncul; klik di luar ilustrasi -> lenyap
+    dom.editor?.addEventListener('click', (e) => {
+      const fig = (e.target && e.target.closest) ? e.target.closest('figure') : null;
+      if (fig && dom.editor && dom.editor.contains(fig)) showFigureBar(fig);
+      else hideFigureBar();
+    });
+    // Editor digulir -> bilah tetap menempel di atas ilustrasi
+    dom.editor?.addEventListener('scroll', () => {
+      if (activeFigure && figureBarValid()) positionFigureBar(activeFigure);
+    }, { passive: true });
+
     dom.btnFocus?.addEventListener('click', toggleFocusMode);
     dom.btnReader?.addEventListener('click', toggleReaderMode);
     $('#btn-theme')?.addEventListener('click', toggleTheme);
@@ -2114,6 +2284,7 @@
         else if (isFocusMode) exitFocusMode();
         else if (isReaderMode) exitReaderMode();
         else if (sidebarOpen()) closeSidebar();
+        else if (figureBarShown()) hideFigureBar();
       }
     });
 

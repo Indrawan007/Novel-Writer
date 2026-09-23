@@ -286,6 +286,7 @@ const RichText = {
   /** Daftar blok -> HTML kanonik (bentuk tunggal yang disimpan). */
   serialize(blok) {
     return (blok || []).map(b => {
+      if (b.tag === 'figure') return this._figureHtml(b);
       const attrs = b.scene ? ' class="scene"' : (b.gap ? ' class="gap"' : '');
       const inner = (b.runs || []).map(r => this._runHtml(r)).join('');
       return '<' + b.tag + attrs + '>' + inner + '</' + b.tag + '>';
@@ -635,6 +636,71 @@ const RichText = {
       this._pruneEmpty(b);
     }
     this._restoreSel(el, saved);
+    return true;
+  },
+
+  /**
+   * Blok <figure> leluhur dari `node` (bila ada di dalam `root`) — null
+   * bila node bukan bagian dari ilustrasi. Dipakai bilah aksi ilustrasi.
+   */
+  figureFromNode(node, root) {
+    let n = node;
+    while (n && n !== root) {
+      if (n.nodeType === 1 && n.tagName && String(n.tagName).toLowerCase() === 'figure') return n;
+      n = n.parentNode;
+    }
+    return null;
+  },
+
+  /** Paragraf kosong? (tanpa teks/nbsp, tanpa elemen selain <br>) */
+  _isEmptyParagraph(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (String(node.tagName).toLowerCase() !== 'p') return false;
+    if ((node.textContent || '').replace(/[\s\u00a0]/g, '')) return false;
+    if (node.querySelectorAll) {
+      for (const c of node.querySelectorAll('*')) {
+        if (String(c.tagName).toLowerCase() !== 'br') return false;
+      }
+    }
+    return true;
+  },
+
+  /**
+   * Hapus satu ilustrasi (<figure>) dari editor. Paragraf lanjutan kosong
+   * yang ditinggalkan penyisipan ikut dibuang, supaya naskah tidak
+   * menyisakan jeda "hantu". Mengembalikan true bila ada yang terhapus.
+   */
+  removeFigure(el, fig) {
+    if (!el || !fig || !el.contains || !el.contains(fig)) return false;
+    if (String(fig.tagName).toLowerCase() !== 'figure') return false;
+    const next = fig.nextSibling;
+    fig.parentNode.removeChild(fig);
+    if (this._isEmptyParagraph(next) && next.parentNode) next.parentNode.removeChild(next);
+    this.syncEmpty(el);
+    return true;
+  },
+
+  /**
+   * Ganti gambar sebuah ilustrasi DI TEMPAT: posisi, kelas ukuran, dan
+   * keterangan dipertahankan — hanya src (dan ukuran piksel) yang
+   * diperbarui. data: { src, width, height } — src wajib lolos allowlist
+   * ImageUtil.safeSrc. Mengembalikan false bila src tidak aman.
+   */
+  replaceFigureImage(el, fig, data) {
+    if (!el || !fig || !data || !el.contains || !el.contains(fig)) return false;
+    if (String(fig.tagName).toLowerCase() !== 'figure') return false;
+    const src = this.safeImgSrc(data.src);
+    if (!src) return false;
+    const img = fig.querySelector ? fig.querySelector('img') : null;
+    if (!img) return false;
+    img.setAttribute('src', src);
+    const w = this._dim(data.width);
+    const h = this._dim(data.height);
+    if (w > 0) img.setAttribute('width', String(w));
+    else img.removeAttribute('width');
+    if (h > 0) img.setAttribute('height', String(h));
+    else img.removeAttribute('height');
+    this.syncEmpty(el);
     return true;
   },
 

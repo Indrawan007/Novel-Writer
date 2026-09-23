@@ -746,6 +746,111 @@ test('ilustrasi: hook sisip menolak src tidak aman & ilustrasi tahan bongkar-mua
   void nw;
 });
 
+test('ilustrasi: klik -> bilah aksi -> ganti gambar (posisi/keterangan/ukuran tetap)', async () => {
+  const { w, $, S, nw } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'Prosa pembuka.');
+  assert.equal(nw.insertFigure({ src: PNG1, alt: 'Minke', caption: 'Minke', width: 900, height: 600, size: 's' }), true);
+  const lama = PNG1;
+
+  // Klik ilustrasi -> bilah aksi muncul (toolbar kecil di atasnya)
+  const fig = $('#editor figure');
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  const bar = $('#figure-bar');
+  assert.equal(bar.hidden, false, 'bilah aksi tampil');
+  assert.equal(bar.getAttribute('role'), 'toolbar');
+  assert.equal(bar.getAttribute('aria-label'), w.NW.t('figureBarAria'));
+  assert.ok($('#btn-fig-replace svg'), 'tombol ganti memakai ikon SVG');
+  assert.ok($('#btn-fig-delete svg'), 'tombol hapus memakai ikon SVG');
+
+  // Klik di luar ilustrasi -> bilah lenyap, ilustrasi tetap
+  const par = $('#editor p');
+  par.dispatchEvent(new w.Event('click', { bubbles: true }));
+  assert.equal(bar.hidden, true, 'bilah lenyap saat klik di luar');
+  assert.ok($('#editor figure'), 'ilustrasi tidak ikut lenyap');
+
+  // Klik lagi lalu pilih berkas baru lewat tombol "Ganti"
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  assert.equal(bar.hidden, false);
+  setFileInput(w, $('#inp-fig-file'), 'minke-baru.png', 'gambar baru', 'image/png');
+  await wait(200);
+
+  const img = $('#editor figure img');
+  assert.match(img.getAttribute('src'), /^data:image\/png;base64,/, 'gambar baru dimuat');
+  assert.notEqual(img.getAttribute('src'), lama, 'src berganti');
+  assert.equal($('#editor figure').className, 'fig-s', 'kelas ukuran dipertahankan');
+  assert.equal(img.getAttribute('alt'), 'Minke', 'alt dipertahankan');
+  assert.equal($('#editor figure figcaption').textContent, 'Minke', 'keterangan dipertahankan');
+  assert.equal(bar.hidden, false, 'bilah tetap tampil setelah ganti');
+  assert.equal($('#toast').textContent, w.NW.t('imageReplaced'));
+
+  // Tersimpan di bab — ilustrasi utuh (regresi: dulu gambar hilang saat disimpan)
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch.content,
+    '<p>Prosa pembuka.</p><figure class="fig-s"><img src="' + img.getAttribute('src') + '" alt="Minke">' +
+    '<figcaption>Minke</figcaption></figure>');
+  assert.deepEqual(w.__errors, []);
+});
+
+test('ilustrasi: hapus lewat bilah aksi — naskah tersimpan tanpa jeda hantu', async () => {
+  const { w, $, S, nw } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'Prosa pembuka.');
+  assert.equal(nw.insertFigure({ src: PNG1, alt: 'Minke', caption: 'Minke', width: 900, height: 600, size: 'm' }), true);
+
+  const fig = $('#editor figure');
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  assert.equal($('#figure-bar').hidden, false);
+  click(w, $('#btn-fig-delete'));
+  await wait(30);
+
+  assert.equal($('#editor figure'), null, 'ilustrasi terhapus dari editor');
+  assert.equal($('#figure-bar').hidden, true, 'bilah lenyap setelah hapus');
+  assert.equal($('#toast').textContent, w.NW.t('imageDeleted'));
+  const ch = S.getProject('p1').chapters.find(c => c.id === 'c1');
+  assert.equal(ch.content, '<p>Prosa pembuka.</p>', 'tersimpan tanpa ilustrasi & tanpa jeda hantu');
+  assert.deepEqual(w.__errors, []);
+  void nw;
+});
+
+test('ilustrasi: Esc menutup bilah aksi; bilah lenyap saat ganti bab', async () => {
+  const { w, $, $$, nw } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'Prosa.');
+  assert.equal(nw.insertFigure({ src: PNG1, alt: 'Minke', caption: 'Minke', width: 900, height: 600, size: 'm' }), true);
+
+  const fig = $('#editor figure');
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  assert.equal($('#figure-bar').hidden, false);
+
+  // Esc hanya menutup bilah — ilustrasi aman
+  key(w, $('#btn-fig-delete'), { key: 'Escape' });
+  assert.equal($('#figure-bar').hidden, true, 'Esc menyembunyikan bilah');
+  assert.ok($('#editor figure'), 'ilustrasi tetap ada');
+
+  // Klik lagi, lalu pindah bab -> bilah lenyap
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  assert.equal($('#figure-bar').hidden, false);
+  click(w, $$('#chapter-list li')[1]);
+  await wait(40);
+  assert.equal($('#figure-bar').hidden, true, 'bilah lenyap saat ganti bab');
+  assert.deepEqual(w.__errors, []);
+  void nw;
+});
+
+test('ilustrasi: berkas tidak didukung saat ganti -> pesan error, gambar lama utuh', async () => {
+  const { w, $, nw } = await createApp({ seed: seedProject() });
+  type(w, $('#editor'), 'Prosa.');
+  assert.equal(nw.insertFigure({ src: PNG1, alt: 'Minke', caption: 'Minke', width: 900, height: 600, size: 'm' }), true);
+
+  const fig = $('#editor figure');
+  fig.querySelector('img').dispatchEvent(new w.Event('click', { bubbles: true }));
+  setFileInput(w, $('#inp-fig-file'), 'bukan-gambar.svg', '<svg/>', 'image/svg+xml');
+  await wait(200);
+
+  assert.equal(fig.isConnected, true, 'ilustrasi lama tetap ada');
+  assert.equal($('#editor figure img').getAttribute('src'), PNG1, 'src tidak berubah');
+  assert.equal($('#toast').textContent, w.NW.t('imageBadType'), 'pengguna diberi tahu');
+  assert.deepEqual(w.__errors, []);
+});
+
 test('ilustrasi besar diperkecil & dikompres otomatis; gambar kecil dipakai apa adanya', async () => {
   const { w, dom } = await createApp({ seed: seedProject() });
   const IMGU = w.NW.ImageUtil;

@@ -39,6 +39,7 @@
     chevronLeft:  svg('<path d="M15 18l-6-6 6-6"/>', 15),
     chevronRight: svg('<path d="M9 18l6-6-6-6"/>', 15),
     image:        svg('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16.5L16 11.5L5.5 20"/>', 15),
+    replace:      svg('<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>', 15),
     typewriter:   svg('<rect x="3" y="11" width="18" height="8" rx="2"/><path d="M7 15h.01M11 15h.01M15 15h.01M7 7.5h10M9.5 7.5v-2h5v2"/>', 15),
     paragraph:    svg('<path d="M10 20V7a3 3 0 0 1 3-3h4a4 4 0 0 1 0 8h-7"/><path d="M10 4v16"/>', 15)
   };

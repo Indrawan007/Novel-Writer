@@ -165,6 +165,19 @@
           </button>
         </div>
         <div id="editor" class="prose" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" data-empty="true"></div>
+        <div id="editor" class="prose" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" aria-labelledby="editor-label" data-i18n-placeholder="editorPlaceholder" data-empty="true"></div>
+        <!-- Bilah aksi ilustrasi: muncul di atas ilustrasi saat diklik (ganti/hapus) -->
+        <div id="figure-bar" class="fig-bar" role="toolbar" aria-label="Aksi ilustrasi" data-i18n-aria="figureBarAria" hidden>
+          <button type="button" class="fig-bar-btn" id="btn-fig-replace" data-i18n-title="imageReplace" data-i18n-aria="imageReplace" title="Ganti gambar" aria-label="Ganti gambar">
+            <span class="icon" data-icon="replace" aria-hidden="true"></span>
+            <span data-i18n="imageReplaceBtn">Ganti</span>
+          </button>
+          <button type="button" class="fig-bar-btn fig-bar-danger" id="btn-fig-delete" data-i18n-title="imageDelete" data-i18n-aria="imageDelete" title="Hapus ilustrasi" aria-label="Hapus ilustrasi">
+            <span class="icon" data-icon="trash" aria-hidden="true"></span>
+            <span data-i18n="delete">Hapus</span>
+          </button>
+          <input type="file" id="inp-fig-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        </div>
         <!-- Tampilan Mode Baca: bab dirender sebagai halaman buku (js/richtext.js) -->
         <div id="reader-view" class="prose" hidden tabindex="0" role="document" aria-live="off" data-i18n-aria="readerMode" aria-label="Mode Baca"></div>
       </div>

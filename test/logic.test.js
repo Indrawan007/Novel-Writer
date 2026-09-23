@@ -478,6 +478,92 @@ test('RichText: operasi blok tidak pernah merusak ilustrasi', () => {
   assert.equal(fig.querySelector('figcaption').textContent, 'Minke');
 });
 
+test('RichText: ilustrasi tidak hilang saat diserialisasi (regresi bug serialize)', () => {
+  const html = '<p>Prosa.</p><figure class="fig-s"><img src="' + PNG + '" alt="Nyai" width="900" height="600">' +
+    '<figcaption>Nyai Ontosoroh</figcaption></figure><p>Lanjut.</p>';
+  assert.equal(RichText.sanitize(html), html, 'round-trip kanonik utuh (img + keterangan + ukuran)');
+  // ilustrasi di awal/akhir dokumen pun tetap hidup
+  assert.equal(RichText.sanitize('<figure><img src="' + PNG + '"></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt=""></figure>');
+});
+
+test('RichText.removeFigure: ilustrasi terhapus, paragraf lanjutan kosong ikut dibuang', () => {
+  // pola hasil insertFigure: figure + paragraf lanjutan kosong
+  const el = sandbox.document.createElement('div');
+  el.innerHTML = '<p>Sebelum.</p><figure class="fig-m"><img src="' + PNG + '" alt="Tokoh">' +
+    '<figcaption>Tokoh</figcaption></figure><p><br></p><p>Sesudah.</p>';
+  const fig = el.querySelector('figure');
+  assert.equal(RichText.removeFigure(el, fig), true);
+  assert.equal(el.innerHTML, '<p>Sebelum.</p><p>Sesudah.</p>', 'tanpa jeda "hantu"');
+  assert.equal(RichText.removeFigure(el, fig), false, 'tidak ada yang bisa dihapus');
+
+  // paragraf SETELAH figure yang berisi teks TIDAK ikut terhapus
+  const el2 = sandbox.document.createElement('div');
+  el2.innerHTML = '<figure><img src="' + PNG + '"></figure><p>Teks penting.</p>';
+  assert.equal(RichText.removeFigure(el2, el2.querySelector('figure')), true);
+  assert.equal(el2.innerHTML, '<p>Teks penting.</p>');
+
+  // ilustrasi satu-satunya: editor jadi kosong (placeholder siap tampil)
+  const el3 = sandbox.document.createElement('div');
+  el3.innerHTML = '<figure><img src="' + PNG + '"></figure><p><br></p>';
+  assert.equal(RichText.removeFigure(el3, el3.querySelector('figure')), true);
+  assert.equal(el3.innerHTML, '');
+  assert.equal(el3.getAttribute('data-empty'), 'true');
+
+  // bukan ilustrasi / di luar editor -> ditolak apa adanya
+  const el4 = sandbox.document.createElement('div');
+  el4.innerHTML = '<p>bukan figure</p>';
+  assert.equal(RichText.removeFigure(el4, el4.querySelector('p')), false);
+  const luar = sandbox.document.createElement('div');
+  assert.equal(RichText.removeFigure(el4, luar), false);
+});
+
+test('RichText.replaceFigureImage: src & ukuran diperbarui di tempat, keterangan & kelas tetap', () => {
+  const el = sandbox.document.createElement('div');
+  el.innerHTML = '<figure class="fig-s"><img src="' + PNG + '" alt="Minke" width="100" height="100">' +
+    '<figcaption>Minke</figcaption></figure>';
+  const fig = el.querySelector('figure');
+  const newSrc = 'data:image/jpeg;base64,' + 'Q'.repeat(120);
+  assert.equal(RichText.replaceFigureImage(el, fig, { src: newSrc, width: 640, height: 480 }), true);
+  const img = el.querySelector('figure img');
+  assert.equal(img.getAttribute('src'), newSrc);
+  assert.equal(img.getAttribute('width'), '640');
+  assert.equal(img.getAttribute('height'), '480');
+  assert.equal(fig.className, 'fig-s', 'kelas ukuran dipertahankan');
+  assert.equal(fig.querySelector('figcaption').textContent, 'Minke', 'keterangan dipertahankan');
+  // hasil tetap lolos sanitasi (round-trip)
+  assert.ok(RichText.sanitize(el.innerHTML).includes(newSrc), 'src baru tersimpan lewat sanitasi');
+
+  // src berbahaya ditolak — gambar lama tidak berubah
+  assert.equal(RichText.replaceFigureImage(el, fig, { src: 'javascript:alert(1)' }), false);
+  assert.equal(RichText.replaceFigureImage(el, fig, { src: 'data:image/svg+xml;base64,PHN2Zz4=' }), false);
+  assert.equal(el.querySelector('figure img').getAttribute('src'), newSrc);
+
+  // ukuran tak dikenal -> atribut width/height dibuang (rasio CSS yang mengatur)
+  assert.equal(RichText.replaceFigureImage(el, fig, { src: PNG }), true);
+  assert.equal(el.querySelector('figure img').hasAttribute('width'), false);
+  assert.equal(el.querySelector('figure img').hasAttribute('height'), false);
+
+  // bukan figure / figure tanpa img -> ditolak
+  const el4 = sandbox.document.createElement('div');
+  el4.innerHTML = '<p>bukan figure</p>';
+  assert.equal(RichText.replaceFigureImage(el4, el4.querySelector('p'), { src: PNG }), false);
+  const el5 = sandbox.document.createElement('div');
+  el5.innerHTML = '<figure></figure>';
+  assert.equal(RichText.replaceFigureImage(el5, el5.querySelector('figure'), { src: PNG }), false);
+});
+
+test('RichText.figureFromNode: mencari ilustrasi leluhur dari node mana pun', () => {
+  const el = sandbox.document.createElement('div');
+  el.innerHTML = '<p>Prosa.</p><figure class="fig-m"><img src="' + PNG + '" alt="a">' +
+    '<figcaption>Minke</figcaption></figure>';
+  const fig = el.querySelector('figure');
+  assert.equal(RichText.figureFromNode(fig, el), fig);
+  assert.equal(RichText.figureFromNode(fig.querySelector('img'), el), fig);
+  assert.equal(RichText.figureFromNode(fig.querySelector('figcaption').firstChild, el), fig);
+  assert.equal(RichText.figureFromNode(el.querySelector('p'), el), null, 'paragraf biasa bukan ilustrasi');
+});
+
 test('Exporter.buildText: ilustrasi jadi baris keterangan di .txt', () => {
   Storage.saveProject({
     id: 'gbr', title: 'Bergambar', author: '', chapters: [{

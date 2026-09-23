@@ -21,7 +21,9 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   browser agar hemat `localStorage`, tersimpan menyatu dengan bab, tampil di
   Mode Baca, dan ikut ke ekspor PDF & DOCX (di TXT menjadi baris keterangan).
   Tempel (`Ctrl+V`) atau seret-lepas berkas gambar langsung ke posisi kursor
-  juga didukung
+  juga didukung. **Ilustrasi bisa diganti & dihapus**: klik ilustrasinya di
+  editor, lalu pakai bilah aksi di atasnya — **Ganti** (pilih berkas baru,
+  ditukar di tempat tanpa mengubah posisi/keterangan/ukuran) atau **Hapus**
 - **Mode Fokus** (`Ctrl+Shift+F` / `F9`) & **Mode Baca** (`Ctrl+Shift+R` / `F10`) —
   imersif penuh: fullscreen otomatis, semua chrome (sidebar, toolbar, panel
   format, HUD) lenyap total dan hanya muncul saat ada aktivitas; kursor pun
@@ -48,7 +50,7 @@ tanpa backend. Seluruh data tersimpan di `localStorage` browser.
   (tanpa `innerHTML` dari data pengguna). Isi lama berupa teks polos tampil apa
   adanya (teks, bukan HTML); id dari file backup divalidasi
 - **Offline-ready** via Service Worker (navigasi network-first → update langsung terasa)
-- **Test suite** 81 kasus (Node + jsdom) + CI
+- **Test suite** 89 kasus (Node + jsdom) + CI
 
 ## Desain
 
@@ -129,12 +131,12 @@ test/                 Test suite (Node + jsdom)
 
 ```bash
 npm install     # dependensi pengujian saja (jsdom)
-npm test        # 81 kasus: logika, perilaku UI, keamanan, konsistensi
+npm test        # 89 kasus: logika, perilaku UI, keamanan, konsistensi
 ```
 
 Cakupan: CRUD & auto-save, panel format WYSIWYG (tebal/miring/judul/kutipan/
 jeda adegan, tanpa penyisipan penanda), ilustrasi (validasi src, kompresi,
-round-trip, ekspor), regresi "Tab menghapus seleksi",
+round-trip, **ganti & hapus lewat bilah aksi**, ekspor), regresi "Tab menghapus seleksi",
 flush saat unload, kuota penuh, Mode Baca (isi berformat + isi lama polos),
 sanitasi (script/handler tidak ikut hidup), keamanan restore, HUD imersif
 (kata sesi, navigasi bab, progres baca, font baca, toggle persisten), ekspor
@@ -168,6 +170,31 @@ Tidak ada dependensi runtime npm. Library eksternal dimuat via CDN saat dibutuhk
 - [docx](https://docx.js.org/) — ekspor DOCX (lazy-load)
 
 Dev-dependency (hanya untuk pengujian): `jsdom`.
+
+## Catatan Rilis v1.5.1
+
+Fitur ilustrasi dilengkapi: **gambar bisa diganti & dihapus** — dan bug
+kritis di rilis v1.5.0 diperbaiki.
+
+- **Bilah aksi ilustrasi** — klik sebuah ilustrasi di editor dan bilah kecil
+  muncul di atasnya:
+  - **Ganti** — pilih berkas baru; gambar ditukar di tempat (posisi, kelas
+    ukuran, dan keterangan dipertahankan). Berkas melewati jalur validasi &
+    kompresi yang sama dengan sisipan baru.
+  - **Hapus** — buang ilustrasi dari naskah (paragraf lanjutan kosong yang
+    ditinggalkan penyisipan ikut dibuang, tanpa menyisakan jeda "hantu").
+  - Bilah lenyap saat klik di luar ilustrasi, `Esc`, ganti bab/proyek,
+    masuk Mode Baca, atau ilustrasinya terhapus lewat cara lain. Di Mode
+    Fokus ia mengikuti perilaku chrome imersif (lenyap saat idle, muncul
+    lagi saat ada aktivitas).
+- **Perbaikan bug kritis: ilustrasi hilang saat disimpan** —
+  `RichText.serialize()` tidak memakai `_figureHtml()` sehingga setiap
+  penyimpanan mereduksi ilustrasi menjadi `<figure></figure>` (gambar &
+  keterangan lenyap saat bab dimuat ulang). Sekarang ilustrasi ikut tersimpan
+  utuh dalam bentuk kanonik (src, ukuran piksel, keterangan, kelas ukuran).
+- 8 tes baru (round-trip serialize, `removeFigure`, `replaceFigureImage`,
+  `figureFromNode`, bilah aksi UI: tampil/ganti/hapus/Esc/ganti bab/berkas
+  tidak didukung) — total 89 kasus.
 
 ## Catatan Rilis v1.5.0
 
