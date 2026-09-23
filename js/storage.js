@@ -423,7 +423,14 @@ const Storage = {
       throw new Error('Invalid backup: properti "projects" (array) tidak ditemukan');
     }
     const coerced = this._coerce(data);
-    this.snapshot();
+    // Cadangan WAJIB tersedia agar restore bisa dibatalkan — tanpa ini data
+    // lama hilang selamanya. Kegagalan (kuota penuh) = batalkan import,
+    // jangan jalan setengah. (regresi BUG-07)
+    if (!this.snapshot()) {
+      const e = new Error('Gagal membuat snapshot sebelum restore');
+      e.code = 'snapshot';
+      throw e;
+    }
     if (!this.save(coerced)) return false;
     this.repairPointers();
     return this.commit();

@@ -1829,11 +1829,12 @@
         projects: incoming.projects, chapters: incoming.chapters, words: nf(incoming.words),
         curProjects: cur.projects, curChapters: cur.chapters, curWords: nf(cur.words)
       }), () => {
-        let ok = false;
+        let ok = false, errCode = null;
         try { ok = Storage.importAll(text); }
-        catch { ok = false; }
+        catch (e) { errCode = e && e.code; }
         if (!ok) {
-          toast(Storage.lastError() === 'quota' ? t('storageFull') : t('restoreFail'), 8000, 'error');
+          if (errCode === 'snapshot') toast(t('snapshotFail'), 8000, 'error');
+          else toast(Storage.lastError() === 'quota' ? t('storageFull') : t('restoreFail'), 8000, 'error');
           return;
         }
         afterDataReplaced();
@@ -2382,7 +2383,15 @@
       if (document.execCommand) document.execCommand('defaultParagraphSeparator', false, 'p');
     } catch {}
     const s = Storage.getSettings();
+    // Perbaiki penunjuk "terakhir dibuka" yang dangkal. `s` adalah referensi
+    // ke settings cache, jadi ubahannya terbaca di bawah; bila ada yang
+    // diperbaiki, persist (senyap — error simpan akan dilaporkan saat
+    // penulisan nyata berikutnya) (regresi BUG-06).
+    const beforeP = s.lastProject, beforeC = s.lastChapter;
     Storage.repairPointers();
+    if (s.lastProject !== beforeP || s.lastChapter !== beforeC) {
+      try { Storage.commit(); } catch {}
+    }
     activeProjectId = s.lastProject;
     activeChapterId = s.lastChapter;
     applyTheme(s.theme);

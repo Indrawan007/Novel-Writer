@@ -28,6 +28,14 @@ test('semua key data-i18n* di HTML ada di kedua kamus bahasa', () => {
   assert.deepEqual(missing, [], `key hilang: ${missing.join(', ')}`);
 });
 
+test('BUG-01: tidak ada ID duplikat di HTML (dulu: dua <div id="editor">)', () => {
+  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]);
+  const dup = ids.filter((v, i) => ids.indexOf(v) !== i);
+  assert.deepEqual(dup, [], `ID duplikat: ${[...new Set(dup)].join(', ')}`);
+  // editor persis satu — permukaan penulisan tunggal
+  assert.equal(html.match(/id="editor"/g).length, 1);
+});
+
 test('semua nama data-icon ada di Icons', () => {
   const used = [...html.matchAll(/data-icon="([^"]+)"/g)].map(m => m[1]);
   const defined = new Set([...iconsJs.matchAll(/^\s{4}(\w+):\s+svg\(/gm)].map(m => m[1]));
@@ -69,6 +77,9 @@ test('manifest tidak lagi memakai ikon data: URL (tak didukung untuk instalasi)'
 test('cache Service Worker dinaikkan versinya saat strategi berubah', () => {
   assert.match(swJs, /novel-writer-v\d+/);
   assert.match(swJs, /request\.mode === 'navigate'/, 'navigasi harus network-first');
+  // BUG-04: allow-list CDN = host eksak, bukan pencocokan substring 'cdn'
+  assert.doesNotMatch(swJs, /hostname\.includes\(|\.includes\('cdn'\)/,
+    'CDN harus di-allowlist per host eksak');
 });
 
 test('seluruh skrip lolos pemeriksaan sintaks Node', () => {

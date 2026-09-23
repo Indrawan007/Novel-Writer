@@ -105,6 +105,25 @@ test('Storage: snapshot & restoreSnapshot (undo restore)', () => {
   assert.ok(sebelum.length > 0);
 });
 
+test('BUG-07: importAll ABORT bila snapshot gagal (tanpa undo, import dilarang)', () => {
+  Storage.save({ projects: [{ id: 'lama', title: 'Lama', chapters: [] }],
+    settings: Storage.getSettings() });
+  const store = sandbox.localStorage;
+  const origSet = store.setItem;
+  store.setItem = () => { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; };
+  try {
+    assert.throws(
+      () => Storage.importAll(JSON.stringify({ projects: [{ id: 'baru', title: 'Baru', chapters: [] }] })),
+      (e) => e.code === 'snapshot',
+      'snapshot gagal -> import dilempar dengan code "snapshot"');
+    Storage.invalidate();
+    assert.equal(Storage.getProject('lama').title, 'Lama', 'data lama tidak boleh ditimpa');
+    assert.equal(Storage.getProject('baru'), null, 'data masuk tidak boleh setengah masuk');
+  } finally {
+    store.setItem = origSet;
+  }
+});
+
 test('Storage.repairPointers: penunjuk rusak diperbaiki', () => {
   Storage.save({ projects: [{ id: 'x', title: 'X', chapters: [{ id: 'c', title: 'C', content: '', order: 1 }] }],
     settings: { ...Storage.getSettings(), lastProject: 'hilang', lastChapter: 'juga-hilang' } });
@@ -448,6 +467,23 @@ test('RichText: src gambar berbahaya dibuang, teks keterangan diselamatkan', () 
   assert.equal(RichText.sanitize('<figure><img src="' + PNG + '" alt="&quot;&lt;b&gt;&quot;">' +
     '<figcaption>&lt;b&gt;</figcaption></figure>'),
     '<figure class="fig-m"><img src="' + PNG + '" alt="&quot;&lt;b&gt;&quot;"><figcaption>&lt;b&gt;</figcaption></figure>');
+});
+
+test('BUG-03: <figure> src tidak aman -> sisa isi figure tidak ikut hilang', () => {
+  // caption diselamatkan (perilaku lama) — SEKARANG sisa isi ikut selamat
+  assert.equal(
+    RichText.sanitize('<p>sebelum</p><figure class="fig-m"><img src="javascript:alert(1)" alt="">' +
+      '<figcaption>tokoh A</figcaption><p>teks lanjutan di dalam figure</p></figure><p>sesudah</p>'),
+    '<p>sebelum</p><p>tokoh A</p><p>teks lanjutan di dalam figure</p><p>sesudah</p>',
+    'teks di dalam figure ikut diselamatkan ketika gambarnya dibuang');
+  // tanpa caption: sisa isi tetap menjadi paragraf
+  assert.equal(
+    RichText.sanitize('<figure><img src="javascript:alert(1)"><p>hanya sisa</p></figure>'),
+    '<p>hanya sisa</p>');
+  // jalur src aman tetap seperti semula (tidak terdampak)
+  assert.equal(
+    RichText.sanitize('<figure class="fig-m"><img src="' + PNG + '"><figcaption>T</figcaption><p>sisa</p></figure>'),
+    '<figure class="fig-m"><img src="' + PNG + '" alt="T"><figcaption>T</figcaption></figure><p>sisa</p>');
 });
 
 test('RichText.toPlainText: ilustrasi jadi baris keterangan (ekspor .txt)', () => {

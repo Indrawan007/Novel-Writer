@@ -129,11 +129,28 @@ const RichText = {
           const caption = this._plainText(capEl ? capEl.textContent : '');
           const text = caption || alt;
 
+          // Sisa isi <figure> (mis. paragraf hasil Enter di dalam keterangan)
+          // TIDAK dibuang — ia jadi blok teks tersendiri setelah ilustrasi.
+          // Dipakai di KEDUA jalur (src aman & tidak aman) supaya tidak ada
+          // teks yang hilang saat gambar dibuang (regresi BUG-03).
+          const visitRest = () => {
+            if (!host) return;
+            for (const kid of [...host.childNodes]) {
+              if (kid.nodeType === 3) { pushText(kid.nodeValue, false, false); continue; }
+              if (kid.nodeType !== 1) continue;
+              const ktag = String(kid.tagName || '').toLowerCase();
+              if (ktag === 'img' || ktag === 'figcaption') continue;
+              visit(kid, false, false);
+            }
+            endBlock();
+          };
+
           endBlock();
           if (!src) {
             // src tidak aman/hilang -> gambar dibuang, TEKSNYA diselamatkan
-            // (keterangan/alt jadi paragraf, supaya tulisan tidak lenyap)
+            // (keterangan/alt + sisa isi figure jadi paragraf)
             if (text) { startBlock('p', true); pushText(text, false, false); endBlock(); }
+            visitRest();
             continue;
           }
           startBlock('figure', true);
@@ -144,18 +161,7 @@ const RichText = {
           cur.height = this._dim(get(imgEl, 'height'));
           cur.size = this._figSize(host ? host.getAttribute('class') : '');
           endBlock();
-          // Sisa isi <figure> (mis. paragraf hasil Enter di dalam keterangan)
-          // TIDAK dibuang — ia jadi blok teks tersendiri setelah ilustrasi.
-          if (host) {
-            for (const kid of [...host.childNodes]) {
-              if (kid.nodeType === 3) { pushText(kid.nodeValue, false, false); continue; }
-              if (kid.nodeType !== 1) continue;
-              const ktag = String(kid.tagName || '').toLowerCase();
-              if (ktag === 'img' || ktag === 'figcaption') continue;
-              visit(kid, false, false);
-            }
-            endBlock();
-          }
+          visitRest();
           continue;
         }
 

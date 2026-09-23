@@ -7,7 +7,7 @@
      • CDN (html2pdf/docx, lazy-load saat ekspor) -> network-first + cache fallback
    ============================================ */
 
-const CACHE_NAME = 'novel-writer-v12';
+const CACHE_NAME = 'novel-writer-v13';
 
 // URL relatif terhadap lokasi sw.js → aman di sub-path
 // (mis. https://user.github.io/Novel-Writer/) maupun root domain.
@@ -34,9 +34,24 @@ const ASSETS = [
 
 const HOME = BASE + 'index.html';
 
+/* Host CDN EKSAK yang dipakai aplikasi (lazy-load saat ekspor).
+   Dulu dipakai substring 'cdn' — host mana pun yang memuat string itu
+   (termasuk 'cdn.attacker.com') ikut di-cache & bisa disajikan offline. */
+const CDN_HOSTS = new Set([
+  'cdnjs.cloudflare.com', // html2pdf.js
+  'unpkg.com',            // docx.js
+  'cdn.jsdelivr.net'      // cadangan umum
+]);
+
 function isCdnHost(hostname) {
-  return hostname.includes('cdn') || hostname.includes('unpkg') ||
-         hostname.includes('jsdelivr') || hostname.includes('cdnjs');
+  return CDN_HOSTS.has(String(hostname || '').toLowerCase());
+}
+
+/** Tulis respons ke cache tanpa unhandled rejection bila cache penuh/terkunci. */
+function cachePut(request, clone) {
+  caches.open(CACHE_NAME)
+    .then((cache) => cache.put(request, clone))
+    .catch(() => {});
 }
 
 // Install — cache aset inti satu per satu:
@@ -77,8 +92,7 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            cachePut(request, response.clone());
           }
           return response;
         })
@@ -97,8 +111,7 @@ self.addEventListener('fetch', (event) => {
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(HOME, clone));
+            cachePut(HOME, response.clone());
           }
           return response;
         })
@@ -113,8 +126,7 @@ self.addEventListener('fetch', (event) => {
       const network = fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+            cachePut(request, response.clone());
           }
           return response;
         })
